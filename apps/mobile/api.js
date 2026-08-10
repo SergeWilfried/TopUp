@@ -55,8 +55,15 @@ async function request(method, path, body) {
   return data;
 }
 
-/** Sends a six-digit code by SMS. */
-export const requestCode = (msisdn) => request('POST', '/auth/otp', { msisdn });
+/**
+ * Sends a six-digit code by SMS.
+ *
+ * `country` matters: accounts are keyed by a national number, so the server
+ * needs the dialling code to reach the handset. Without it a +226 number would
+ * be rebuilt with the home market's prefix and the code would go to a stranger.
+ */
+export const requestCode = (msisdn, country) =>
+  request('POST', '/auth/otp', { msisdn, country });
 
 /** Exchanges the code for a session and remembers it. */
 export async function verifyCode(msisdn, code) {

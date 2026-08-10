@@ -12,6 +12,16 @@ export type Env = {
   LAFRICAMOBILE_LOGIN?: string;
   LAFRICAMOBILE_PASSWORD?: string;
   LAFRICAMOBILE_BASE_URL?: string;
+  // SMS login codes. Either TWILIO_FROM or TWILIO_MESSAGING_SERVICE_SID is
+  // required; the service handles sender selection and per-country compliance.
+  TWILIO_ACCOUNT_SID?: string;
+  TWILIO_AUTH_TOKEN?: string;
+  TWILIO_FROM?: string;
+  TWILIO_MESSAGING_SERVICE_SID?: string;
+  /** Last-resort dialling code when a client sends no country. */
+  SMS_DEFAULT_COUNTRY?: string;
+  /** Overridden in tests to point at a local double. */
+  TWILIO_BASE_URL?: string;
 
   // Checkout providers.
   PUBLIC_BASE_URL?: string;

@@ -1,4 +1,5 @@
 import { days, now, randHex, sha256, timingSafeEqual, type Env } from '../env';
+import { sendSms, toE164 } from './twilio';
 
 export type User = {
   id: string;
@@ -179,8 +180,22 @@ export async function signOut(req: Request, env: Env) {
 }
 
 /** Delivery. Never log the code outside local development. */
-export async function sendOtp(env: Env, identifier: string, code: string, channel: Channel) {
-  if (channel === 'sms') return sendOtpSms(env, identifier, code);
+/**
+ * Delivers a login code.
+ *
+ * Returns the outcome instead of swallowing it. A provider failure is an
+ * infrastructure fault, not a signal about whether the account exists, so the
+ * caller can surface it without leaking anything — and a customer staring at a
+ * code screen that will never receive a code is worse than an honest error.
+ */
+export async function sendOtp(
+  env: Env,
+  identifier: string,
+  code: string,
+  channel: Channel,
+  opts: { raw?: string; country?: string | null } = {},
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (channel === 'sms') return sendOtpSms(env, identifier, code, opts);
   return sendOtpEmail(env, identifier, code);
 }
 
@@ -189,33 +204,72 @@ export async function sendOtp(env: Env, identifier: string, code: string, channe
  * coverage. Until then a phone login only works in development, where the code
  * is logged.
  */
-async function sendOtpSms(env: Env, msisdn: string, code: string) {
-  if (env.ENVIRONMENT !== 'production') {
-    console.log(`[dev] OTP for +${msisdn}: ${code}`);
-    return;
+async function sendOtpSms(
+  env: Env,
+  msisdn: string,
+  code: string,
+  opts: { raw?: string; country?: string | null },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Accounts are keyed by a national number, so E.164 is rebuilt from the
+  // country the client stated — falling back to the home market only.
+  const to = toE164(opts.raw ?? msisdn, opts.country ?? null, env);
+  if (!to) return { ok: false, error: 'msisdn_unroutable' };
+
+  if (env.ENVIRONMENT !== 'production' && !env.TWILIO_ACCOUNT_SID) {
+    // Printing a live code is only ever acceptable off production, and only
+    // when there is no real provider that could have delivered it.
+    console.log(`[dev] OTP for ${to}: ${code}`);
+    return { ok: true };
   }
-  console.error('SMS OTP requested but no SMS provider is configured');
+
+  const result = await sendSms(env, to, `TOPUP: ${code} is your code. It expires in 10 minutes.`);
+  if (!result.ok) {
+    // Never log the code itself, only why delivery failed.
+    console.error(`SMS OTP delivery failed: ${result.error}`);
+    return { ok: false, error: result.error };
+  }
+  return { ok: true };
 }
 
-async function sendOtpEmail(env: Env, email: string, code: string) {
-  if (env.ENVIRONMENT !== 'production') {
-    console.log(`[dev] OTP for ${email}: ${code}`);
-    return;
-  }
-  
+async function sendOtpEmail(
+  env: Env,
+  email: string,
+  code: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!env.RESEND_API_KEY) {
+    // Only print a live code when nothing could have delivered it, and never
+    // on production regardless.
+    if (env.ENVIRONMENT !== 'production') {
+      console.log(`[dev] OTP for ${email}: ${code}`);
+      return { ok: true };
+    }
     console.error('OTP requested but no email provider is configured');
-    return;
+    return { ok: false, error: 'not_configured' };
   }
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      from: 'TOPUP <login@vpn.tofee.app>',
-      to: email,
-      subject: `${code} is your TOPUP code`,
-      text: `Your code is ${code}. It expires in 10 minutes.`,
-    }),
-    signal: AbortSignal.timeout(8000),
-  }).catch((e) => console.error(`OTP email failed: ${(e as Error).message}`));
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: 'TOPUP <login@vpn.tofee.app>',
+        to: email,
+        subject: `${code} is your TOPUP code`,
+        text: `Your code is ${code}. It expires in 10 minutes.`,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    // fetch does not throw on 4xx, and the previous `.catch()` swallowed
+    // everything else — so a rejected send reported success and the customer
+    // waited for an email that was never accepted.
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      console.error(`OTP email rejected: ${res.status} ${body.message ?? ''}`);
+      return { ok: false, error: `http_${res.status}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error(`OTP email failed: ${(e as Error).message}`);
+    return { ok: false, error: 'unreachable' };
+  }
 }

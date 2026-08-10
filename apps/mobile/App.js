@@ -421,7 +421,7 @@ function TopUp() {
                 setOtpError(null);
                 setVerifying(true);
                 try {
-                  await requestCode(phone);
+                  await requestCode(phone, dialCountry);
                   setScreen('otp');
                 } catch (e) {
                   setOtpError(e instanceof ApiError ? e.code : 'network_error');
@@ -430,6 +430,15 @@ function TopUp() {
                 }
               }}
             />
+            {/* A failed send used to leave this screen completely silent: the
+                button finished, nothing moved, and no reason was given. */}
+            {otpError && (
+              <View style={{ borderWidth: 2, borderColor: C.accent, padding: 12 }}>
+                <Text style={{ color: C.accent700, fontFamily: F.semi, fontSize: 13 }}>
+                  {t(`auth.error.${otpError}`, t('auth.sendFailed'))}
+                </Text>
+              </View>
+            )}
             <Text style={st.subText}>{t('auth.smsNote')}</Text>
             <Btn
               variant="ghost"

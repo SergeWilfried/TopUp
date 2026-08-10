@@ -51,14 +51,28 @@ const identify = (body: { email?: string; msisdn?: string } | null) => {
 };
 
 vpn.post('/auth/otp', async (c) => {
-  const body = await c.req.json<{ email?: string; msisdn?: string }>().catch(() => null);
+  const body = await c.req
+    .json<{ email?: string; msisdn?: string; country?: string }>()
+    .catch(() => null);
   const id = identify(body);
   if ('error' in id) return c.json({ error: id.error, field: id.field }, 400);
 
   const result = await requestOtp(c.env, id.identifier, id.channel);
   if (!result.ok) return c.json({ error: result.error }, result.status as 429);
-  await sendOtp(c.env, id.identifier, result.code!, id.channel);
-  // Same response either way: whether the identifier has an account is not leaked.
+
+  // The stored identifier is a national number; the raw input and the country
+  // the client stated are what let the SMS reach the right handset.
+  const delivery = await sendOtp(c.env, id.identifier, result.code!, id.channel, {
+    raw: body?.msisdn,
+    country: body?.country ?? null,
+  });
+
+  // A delivery failure is reported. It reveals nothing about whether the
+  // account exists — a code row is written either way — and the alternative is
+  // sending the customer to a code screen no code will ever arrive at.
+  if (!delivery.ok) return c.json({ error: 'delivery_failed', reason: delivery.error }, 502);
+
+  // Success says nothing about whether the identifier is known to us.
   return c.json({ sent: true, channel: id.channel });
 });
 

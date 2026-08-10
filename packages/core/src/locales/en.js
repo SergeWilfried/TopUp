@@ -56,6 +56,7 @@ export default {
   },
 
   auth: {
+    sendFailed: 'We could not send your code. Try again in a moment.',
     signIn: 'SIGN IN',
     title: 'Your phone number is your account.',
     phoneLabel: 'Phone number',
@@ -71,6 +72,7 @@ export default {
     wrongCode: 'Wrong code — try again. (Hint: it’s 1234.)',
     verifying: 'VERIFYING…',
     error: {
+      delivery_failed: 'We could not send the SMS. Check the number and try again.',
       invalid_code: 'Wrong or expired code — try again.',
       too_many_requests: 'Too many codes requested. Wait a few minutes.',
       msisdn_invalid: 'Check that number and try again.',

@@ -56,6 +56,7 @@ export default {
   },
 
   auth: {
+    sendFailed: 'Impossible d’envoyer votre code. Réessayez dans un instant.',
     signIn: 'CONNEXION',
     title: 'Votre numéro, c’est votre compte.',
     phoneLabel: 'Numéro de téléphone',
@@ -71,6 +72,7 @@ export default {
     wrongCode: 'Code incorrect — réessayez. (Indice : c’est 1234.)',
     verifying: 'VÉRIFICATION…',
     error: {
+      delivery_failed: 'Impossible d’envoyer le SMS. Vérifiez le numéro et réessayez.',
       invalid_code: 'Code incorrect ou expiré — réessayez.',
       too_many_requests: 'Trop de codes demandés. Patientez quelques minutes.',
       msisdn_invalid: 'Vérifiez ce numéro et réessayez.',

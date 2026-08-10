@@ -12,7 +12,10 @@
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "package": "app.tofee.topup",
+      "versionCode": 1
+    },
     "plugins": [
       "expo-font",
       "expo-localization",
