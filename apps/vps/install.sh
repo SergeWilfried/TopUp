@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # wg-agent installer for a fresh Ubuntu 24.04 Hetzner Cloud VPS.
 # Usage (as root):
-#   AGENT_TOKEN=$(openssl rand -hex 32) \
+#   AGENT_TOKEN is NOT generated here — the Worker derives it from the endpoint
+#   code, so a random one would be rejected. Add the endpoint in the admin
+#   console and copy the token it shows, or GET /admin/endpoints/<CODE>/token.
+#   AGENT_TOKEN="<from the console>" \
 #   WG_ENDPOINT="paris.yourvpn.com:51820" \
 #   API_DOMAIN="paris-api.yourvpn.com" \
 #   bash install.sh
 set -euo pipefail
 
-: "${AGENT_TOKEN:?Set AGENT_TOKEN (openssl rand -hex 32)}"
+: "${AGENT_TOKEN:?Set AGENT_TOKEN (copy it from the admin console)}"
 : "${WG_ENDPOINT:?Set WG_ENDPOINT e.g. paris.yourvpn.com:51820}"
 : "${API_DOMAIN:?Set API_DOMAIN e.g. paris-api.yourvpn.com}"
 

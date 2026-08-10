@@ -26,7 +26,7 @@ const path = require("node:path");
 
 // ---------- configuration (env) ----------
 const CFG = {
-  token: mustEnv("AGENT_TOKEN"),                       // long random secret, same value in Worker
+  token: mustEnv("AGENT_TOKEN"),                       // issued by the Worker, unique to this endpoint
   iface: process.env.WG_INTERFACE || "wg0",
   endpoint: mustEnv("WG_ENDPOINT"),                    // e.g. "paris.yourvpn.com:51820"
   subnet: process.env.WG_SUBNET || "10.8.0.0/24",      // client IP pool
