@@ -75,8 +75,11 @@ const internationalise = (msisdn: string, payerCountry: string) => {
  * phone links to the account that placed the orders. Storing the number as
  * typed meant the two never matched.
  */
-async function upsertCustomer(env: Env, raw: string, carrier: string) {
-  const msisdn = raw.startsWith('email:') ? raw : normaliseMsisdn(raw);
+async function upsertCustomer(env: Env, raw: string, carrier: string, country: string) {
+  // Canonical E.164, matching the identity the auth layer stores — this link is
+  // the only thing joining a phone sign-in to the orders placed from it.
+  const msisdn = raw.startsWith('email:') ? raw : normaliseMsisdn(raw, country);
+  if (!msisdn) return null;
   const existing = await env.DB.prepare(`SELECT id FROM customers WHERE msisdn = ?`)
     .bind(msisdn)
     .first<{ id: string }>();
@@ -219,7 +222,13 @@ checkout.post('/', async (c) => {
 
   const t = translator('en');
   const name = product.name_key ? t(product.name_key) : product.name;
-  const customerId = await upsertCustomer(c.env, msisdn || `email:${body.email}`, carrier ?? 'Card');
+  const customerId = await upsertCustomer(
+    c.env,
+    msisdn || `email:${body.email}`,
+    carrier ?? 'Card',
+    country,
+  );
+  if (!customerId) return c.json({ error: 'msisdn_invalid', field: 'msisdn' }, 400);
 
   const orderId = `TX-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const paymentId = crypto.randomUUID();
@@ -238,7 +247,7 @@ checkout.post('/', async (c) => {
       name,
       amount,
       now(),
-      recipientMsisdn ? normaliseMsisdn(recipientMsisdn) : null,
+      recipientMsisdn ? normaliseMsisdn(recipientMsisdn, recipientCountry) : null,
       recipientCountry,
     ),
     c.env.DB.prepare(

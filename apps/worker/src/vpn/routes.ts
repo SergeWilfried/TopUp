@@ -37,10 +37,13 @@ vpn.use('/*', async (c, next) => {
  * Resolves the identifier the caller signed in with. The app sends a phone
  * number, the console and VPN recovery send an email; both land on one account.
  */
-const identify = (body: { email?: string; msisdn?: string } | null) => {
+const identify = (body: { email?: string; msisdn?: string; country?: string } | null) => {
   if (body?.msisdn) {
-    const msisdn = normaliseMsisdn(body.msisdn);
-    return msisdn.length >= 8
+    // Identity is the canonical E.164 form, so the same handset resolves to one
+    // account whether the customer typed a national number, a trunk zero or a
+    // full international prefix.
+    const msisdn = normaliseMsisdn(body.msisdn, body.country);
+    return msisdn
       ? ({ identifier: msisdn, channel: 'sms' as Channel } as const)
       : ({ error: 'msisdn_invalid', field: 'msisdn' } as const);
   }

@@ -1,0 +1,72 @@
+# Worker configuration — every variable the code reads.
+#
+# Copy to `.dev.vars` for local development. That file is gitignored, which is
+# why this one exists: without it there is no record of what a new environment
+# needs, and the failure mode is silent (an unset key usually means a feature
+# quietly does nothing rather than erroring).
+#
+# In production these are Cloudflare secrets, not vars:
+#     npx wrangler secret put NAME
+# except ENVIRONMENT and DEVICE_LIMIT, which are plain `vars` in wrangler.jsonc
+# because they are not sensitive.
+#
+# `.dev.vars` takes precedence over wrangler.jsonc `vars` in local dev.
+
+# ── runtime ─────────────────────────────────────────────────────────────────
+# wrangler.jsonc pins this to "production" for deploys. Overriding it here is
+# what enables the dev OTP log and /admin/dev/seed locally.
+ENVIRONMENT=development
+
+# Set in wrangler.jsonc `vars`, listed here only so this file is a complete
+# inventory. Not a secret, and not read from .dev.vars in deploys.
+# DEVICE_LIMIT=3
+
+# Base for provider callbacks and post-payment return URLs. Unset means the
+# LAfricaMobile callback is simply not sent.
+PUBLIC_BASE_URL=http://localhost:8787
+
+# ── auth ────────────────────────────────────────────────────────────────────
+# Derives the per-server VPN agent tokens. Nothing is stored in D1, so losing
+# this key orphans every deployed endpoint. `openssl rand -hex 32`
+AGENT_SIGNING_KEY=
+
+# Email login codes and receipts. When unset, dev prints the code instead.
+RESEND_API_KEY=
+
+# SMS login codes. TWILIO_FROM is a number you own (E.164); the Messaging
+# Service is the SID beginning MG. Either works and the service wins, but West
+# African markets generally need it — Twilio sells no local numbers there, so
+# delivery relies on a registered alphanumeric sender ID, which is configured
+# on a Messaging Service.
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_FROM=
+TWILIO_MESSAGING_SERVICE_SID=
+
+# Dialling code used only when a client sends no country. Older app builds do
+# not send one, and rebuilding a foreign number with the wrong prefix delivers
+# the code to a stranger — so this should be the single market you launch in.
+SMS_DEFAULT_COUNTRY=CI
+
+# ── payments ────────────────────────────────────────────────────────────────
+# Mobile money across West Africa. Leave the base URL at the sandbox until live.
+PAWAPAY_API_TOKEN=
+PAWAPAY_BASE_URL=https://api.sandbox.pawapay.io
+
+# Cards and bank in NG/KE/ZA.
+PAYSTACK_SECRET_KEY=
+
+# Cards outside Africa. Stripe cannot settle XOF; the quote converts first.
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+
+# ── delivery ────────────────────────────────────────────────────────────────
+# Airtime distribution. Credentials travel in the query string on /credit —
+# their design — so nothing may log a built URL.
+LAFRICAMOBILE_LOGIN=
+LAFRICAMOBILE_PASSWORD=
+LAFRICAMOBILE_BASE_URL=https://airtime.lafricamobile.com
+
+# ── test only ───────────────────────────────────────────────────────────────
+# Points the Twilio adapter at a local double. Leave unset everywhere real.
+# TWILIO_BASE_URL=http://127.0.0.1:9400

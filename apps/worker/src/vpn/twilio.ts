@@ -1,4 +1,4 @@
-import { diallingCodeFor } from '@topup/core';
+import { toE164 } from '@topup/core';
 import type { Env } from '../env';
 
 /**
@@ -21,40 +21,10 @@ import type { Env } from '../env';
 
 export type SmsResult = { ok: true; sid: string } | { ok: false; error: string };
 
-const configured = (env: Env) =>
+/** Whether a message could actually be sent. Needs a sender, not just an account. */
+export const smsConfigured = (env: Env) =>
   Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && (env.TWILIO_FROM || env.TWILIO_MESSAGING_SERVICE_SID));
 
-/**
- * Best-effort E.164.
- *
- * Returns null rather than guessing when the result would be implausible — an
- * OTP delivered to the wrong handset is worse than one not delivered at all.
- */
-export function toE164(raw: string, countryHint: string | null, env: Env): string | null {
-  const trimmed = String(raw ?? '').trim();
-  const digits = trimmed.replace(/\D/g, '');
-  if (!digits) return null;
-
-  // (1) The customer already told us, by typing a prefix.
-  if (trimmed.startsWith('+')) return `+${digits}`;
-  if (digits.startsWith('00')) return `+${digits.slice(2)}`;
-
-  // (2) then (3).
-  const country = (countryHint || env.SMS_DEFAULT_COUNTRY || 'CI').toUpperCase();
-  const dial = diallingCodeFor(country);
-  if (!dial) return null;
-
-  const national = digits.replace(/^0+/, '');
-  // A national subscriber number outside this range is not a phone number in
-  // any market we serve; sending to it would either bounce or reach someone else.
-  if (national.length < 7 || national.length > 12) return null;
-
-  // Already carries its own dialling code (a caller that passed E.164 without
-  // the plus). Prefixing again would invent a number.
-  if (national.startsWith(dial) && national.length > dial.length + 6) return `+${national}`;
-
-  return `+${dial}${national}`;
-}
 
 /**
  * Sends one message.
@@ -64,7 +34,7 @@ export function toE164(raw: string, countryHint: string | null, env: Env): strin
  * about that carefully.
  */
 export async function sendSms(env: Env, to: string, body: string): Promise<SmsResult> {
-  if (!configured(env)) return { ok: false, error: 'not_configured' };
+  if (!smsConfigured(env)) return { ok: false, error: 'not_configured' };
 
   const form = new URLSearchParams({ To: to, Body: body });
   // A Messaging Service handles sender selection and per-country compliance;

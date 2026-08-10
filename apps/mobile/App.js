@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import './i18n';
 import { loadStoredLanguage } from './i18n';
 
-import { C, F, fmt, fmtN, CARRIERS, detect, flagFor, navItems, networksFor, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
+import { C, F, fmt, fmtN, CARRIERS, detect, flagFor, navItems, networksFor, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
 import {
   ApiError,
   catalogue as fetchCatalogue,
@@ -47,6 +47,20 @@ import LanguageScreen from './screens/LanguageScreen';
 // Which locations have been exported into WireGuard on this handset. Local by
 // nature: the server knows the peer exists, not whether the file was imported.
 const VPN_ADDED_STORE = 'topup.vpn.added';
+
+/**
+ * Where the country pickers start.
+ *
+ * The launch market, not the handset's region. A phone bought abroad or set to
+ * another locale reported the wrong country, and the picker being quietly wrong
+ * is how a login code goes to someone else's number. The device is used only as
+ * a hint, and only when it names a market we can actually serve.
+ */
+const LAUNCH_COUNTRY = process.env.EXPO_PUBLIC_LAUNCH_COUNTRY ?? 'BF';
+const launchCountry = (() => {
+  const device = deviceCountry();
+  return device && PAYABLE_COUNTRIES.some((c) => c.code === device) ? device : LAUNCH_COUNTRY;
+})();
 
 /**
  * A catalogue product as the pack grid wants it.
@@ -117,9 +131,9 @@ function TopUp() {
    * that pays. Seeded from the handset's region, then owned by the picker —
    * device locale is wrong for anyone abroad or on a second-hand phone.
    */
-  const [dialCountry, setDialCountry] = useState(() => deviceCountry() ?? 'CI');
+  const [dialCountry, setDialCountry] = useState(launchCountry);
   // Where a top-up is delivered, which need not be where it is paid from.
-  const [recipientCountry, setRecipientCountry] = useState(() => deviceCountry() ?? 'CI');
+  const [recipientCountry, setRecipientCountry] = useState(launchCountry);
 
   /**
    * Where the *buyer* is, which is what decides the rail.

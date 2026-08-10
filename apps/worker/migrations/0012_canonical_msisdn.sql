@@ -1,0 +1,13 @@
+-- Account identity is canonical E.164 digits from here on.
+--
+-- Deliberately does not rewrite existing rows. The previous code stripped
+-- leading zeros, and in Côte d'Ivoire — where the 2021 renumbering made the
+-- first digit part of the subscriber number rather than a trunk prefix — that
+-- destroyed information a migration cannot recover. Prefixing a dialling code
+-- onto what is left produces a number that is well-formed and belongs to
+-- somebody else, which is worse than a stale identity.
+--
+-- Any pre-existing account therefore keeps its old identifier and creates a new
+-- one on next sign-in. That is acceptable only because this lands before
+-- launch; review the users and customers tables by hand if that is not true.
+SELECT 1;

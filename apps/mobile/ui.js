@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, TextInput, Modal, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, S, F, fmt, flagFor, PAYABLE_COUNTRIES } from '@topup/core';
+import { C, S, F, fmt, flagFor, toE164, PAYABLE_COUNTRIES } from '@topup/core';
 
 export const Kicker = ({ children, light }) => (
   <Text style={[st.kicker, light && { color: 'rgba(243,242,242,0.85)' }]}>{children}</Text>
@@ -83,6 +83,7 @@ export const PhoneInput = ({ value, onChangeText, country, onCountryChange, plac
   const insets = useSafeAreaInsets();
   const [picking, setPicking] = useState(false);
   const selected = PAYABLE_COUNTRIES.find((c) => c.code === country) ?? PAYABLE_COUNTRIES[0];
+  const resolved = toE164(value, selected.code);
 
   return (
     <>
@@ -105,6 +106,16 @@ export const PhoneInput = ({ value, onChangeText, country, onCountryChange, plac
           placeholder={placeholder}
         />
       </View>
+
+      {/* The number that will actually be dialled or texted, resolved by the
+          same function the server uses. Shown because the picker's default is
+          a guess, and a silently wrong country sends the login code to a
+          stranger — visible here, it is obvious before anything is sent. */}
+      {value ? (
+        <Text style={{ marginTop: 6, fontSize: 12, fontFamily: F.semi, color: resolved ? C.muted : C.accent }}>
+          {resolved ? resolved : t('auth.numberUnresolved')}
+        </Text>
+      ) : null}
 
       <Modal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
         {/* A modal is its own root view, so the screen's inset does not apply —

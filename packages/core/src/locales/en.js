@@ -61,6 +61,7 @@ export default {
     title: 'Your phone number is your account.',
     phoneLabel: 'Phone number',
     countryLabel: 'Country',
+    numberUnresolved: 'Check the country and the number.',
     phonePlaceholder: '07 00 00 00 00',
     detected: 'Detected: {{carrier}}',
     sendCode: 'SEND CODE →',

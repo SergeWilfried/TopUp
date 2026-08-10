@@ -159,3 +159,75 @@ export const flagFor = (code) => {
 export const PAYABLE_COUNTRIES = Object.keys(DIALLING_CODES)
   .filter((code) => routeForCountry(code))
   .map((code) => ({ code, dial: DIALLING_CODES[code], nameKey: `country.${code}` }));
+
+/**
+ * The exact number a provider will be given, in E.164.
+ *
+ * Shared by the app and the worker so what the customer is shown is what gets
+ * texted — the two drifting apart is how a login code reaches a stranger.
+ *
+ * Precedence: a dialling code the customer typed themselves beats the country
+ * picker, because typing `+226…` is an explicit statement and the picker may
+ * simply be sitting on its default.
+ *
+ * Returns null rather than guessing. A national number is only meaningful in
+ * its own country, so an implausible result means we do not know the number —
+ * and not sending is always better than sending to the wrong handset.
+ */
+/**
+ * Accepted national subscriber lengths per market.
+ *
+ * This exists because "strip the leading zero" is not a universal rule. In
+ * Burkina Faso a subscriber number is 8 digits and +226 makes 11. In Côte
+ * d'Ivoire the 2021 renumbering made it 10 digits whose first digit is part of
+ * the number, not a trunk prefix — so +225 0709551234 is correct, and stripping
+ * that zero produces a different, possibly real, subscriber.
+ *
+ * Only listed markets can be resolved. An unlisted one is refused rather than
+ * guessed: add its rule before selling into it.
+ */
+export const NATIONAL_LENGTHS = {
+  BF: [8],
+  CI: [10],
+};
+
+export const nationalLengthsFor = (country) =>
+  NATIONAL_LENGTHS[String(country ?? '').toUpperCase()] ?? null;
+
+export const toE164 = (raw, country) => {
+  const trimmed = String(raw ?? '').trim();
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return null;
+
+  // Stated explicitly by the customer.
+  if (trimmed.startsWith('+')) return digits.length >= 8 ? `+${digits}` : null;
+  if (digits.startsWith('00')) {
+    const rest = digits.slice(2);
+    return rest.length >= 8 ? `+${rest}` : null;
+  }
+
+  const dial = diallingCodeFor(country);
+  if (!dial) return null;
+
+  // Already international without the plus — do not prefix it twice.
+  const lengths = nationalLengthsFor(country);
+  if (digits.startsWith(dial) && lengths?.includes(digits.length - dial.length)) return `+${digits}`;
+
+  // Whether a leading zero is a trunk prefix or part of the number depends on
+  // the market, so try both and keep the one that is a valid length there.
+  const candidates = [digits, digits.replace(/^0+/, '')];
+  if (lengths) {
+    const match = candidates.find((n) => lengths.includes(n.length));
+    return match ? `+${dial}${match}` : null;
+  }
+
+  // Unlisted market: no length rule to check against, so refuse rather than
+  // send a code to whatever the digits happen to spell.
+  return null;
+};
+
+/** Canonical account identity: E.164 without the plus, or null when unknown. */
+export const canonicalMsisdn = (raw, country) => {
+  const e164 = toE164(raw, country);
+  return e164 ? e164.slice(1) : null;
+};

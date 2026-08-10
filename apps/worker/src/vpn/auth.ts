@@ -1,5 +1,6 @@
 import { days, now, randHex, sha256, timingSafeEqual, type Env } from '../env';
-import { sendSms, toE164 } from './twilio';
+import { sendSms, smsConfigured } from './twilio';
+import { canonicalMsisdn, toE164 } from '@topup/core';
 
 export type User = {
   id: string;
@@ -18,7 +19,19 @@ export const columnFor = (channel: Channel) => (channel === 'sms' ? 'msisdn' : '
 export const isStaff = (user: User) => user.is_staff === 1;
 
 /** Digits only, so `07 09 55 12 34` and `+225 0709551234` are one identity. */
-export const normaliseMsisdn = (raw: string) => raw.replace(/\D/g, '').replace(/^0+/, '');
+/**
+ * Canonical account identity.
+ *
+ * E.164 digits without the plus, so one handset is one account however the
+ * customer types it. The previous version stripped punctuation and leading
+ * zeros only, which meant `56284997` and `22656284997` — the same phone —
+ * became two accounts with separate orders, points and subscriptions.
+ *
+ * Returns null when the number cannot be resolved; callers must reject rather
+ * than fall back to a looser form, or the split comes straight back.
+ */
+export const normaliseMsisdn = (raw: string, country?: string | null): string | null =>
+  canonicalMsisdn(raw, country ?? undefined);
 
 const OTP_TTL = 10 * 60_000;
 const OTP_MAX_ATTEMPTS = 5;
@@ -210,14 +223,16 @@ async function sendOtpSms(
   code: string,
   opts: { raw?: string; country?: string | null },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  // Accounts are keyed by a national number, so E.164 is rebuilt from the
-  // country the client stated — falling back to the home market only.
-  const to = toE164(opts.raw ?? msisdn, opts.country ?? null, env);
+  // The identifier is already canonical E.164 digits, so this is a formatting
+  // step rather than a reconstruction — the country was resolved at identify().
+  const to = toE164(opts.raw ?? msisdn, opts.country ?? env.SMS_DEFAULT_COUNTRY ?? 'BF');
   if (!to) return { ok: false, error: 'msisdn_unroutable' };
 
-  if (env.ENVIRONMENT !== 'production' && !env.TWILIO_ACCOUNT_SID) {
-    // Printing a live code is only ever acceptable off production, and only
-    // when there is no real provider that could have delivered it.
+  // Printing a live code is only ever acceptable off production, and only when
+  // nothing could have delivered it. Testing for a missing account SID was too
+  // narrow: a half-filled Twilio config — an account but no sender — skipped
+  // the log and then failed to send, breaking local sign-in entirely.
+  if (env.ENVIRONMENT !== 'production' && !smsConfigured(env)) {
     console.log(`[dev] OTP for ${to}: ${code}`);
     return { ok: true };
   }

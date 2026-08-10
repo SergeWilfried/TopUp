@@ -1,3 +1,4 @@
+import { canonicalMsisdn } from '@topup/core';
 import {
   catalogueSeed,
   destinationSeed,
@@ -245,8 +246,10 @@ export async function seedCommerce(env: SeedEnv) {
     statements.push(
       env.DB.prepare(
         `INSERT INTO customers (id, msisdn, name, carrier, points, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-        // Digits only, matching what the auth layer stores on users.msisdn.
-      ).bind(c.id, c.phone.replace(/\D/g, '').replace(/^0+/, ''), c.name, c.carrier, c.points, c.joinedAt),
+        // Canonical E.164 digits, matching what the auth layer stores on
+        // users.msisdn — the two must agree or a phone sign-in finds no orders.
+        // Fixtures are Ivorian, whose leading digit is part of the number.
+      ).bind(c.id, canonicalMsisdn(c.phone, 'CI') ?? c.phone.replace(/\D/g, ''), c.name, c.carrier, c.points, c.joinedAt),
     );
   }
 

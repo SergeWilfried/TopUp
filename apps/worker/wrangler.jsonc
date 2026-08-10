@@ -9,5 +9,7 @@
   // fixtures are still in-memory; only VPN state is persisted so far.
   "d1_databases": [{ "binding": "DB", "database_name": "topup-db", "database_id": "65bb7c8b-0d86-47fa-870a-e429799d8aa6" }],
   "triggers": { "crons": ["*/15 * * * *"] },
-  "vars": { "ENVIRONMENT": "production", "DEVICE_LIMIT": "3" }
+  "vars": { 
+    "ENVIRONMENT": "production", 
+    "DEVICE_LIMIT": "3"
 }
