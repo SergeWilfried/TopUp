@@ -7,7 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "db:init": "wrangler d1 execute topup --local --file=./schema.sql"
+    "db:init": "wrangler d1 execute DB --local --file=./schema.sql"
   },
   "dependencies": {
     "@topup/core": "workspace:*",
