@@ -5,7 +5,7 @@
 // params and resolved per request. Anything that is a unit ("150 MB", "1 GB",
 // "500 FCFA") or a proper noun is stored literally — translating those would be
 // wrong, not merely unnecessary.
-import { CARRIERS, ESIM_DESTINATIONS, fmtN } from './data';
+import { CARRIERS, ESIM_DESTINATIONS, esimPlanSeed, fmtN } from './data';
 
 const HOME = 'Côte d’Ivoire';
 
@@ -27,30 +27,9 @@ const VPN = [
   { nameKey: 'vpn.plan365', name: '1 year', termsKey: 'vpn.planDevices5', price: 45000, days: 365, bonusKey: 'vpn.bestValue' },
 ];
 
-/** eSIM plans per destination, mirroring esimPlansFor. */
-const esimFor = (dest) => {
-  if (dest.kind === 'home')
-    return [
-      { name: 'Orange eSIM · 5 GB', termsKey: 'esim.localValid30', price: 3000, network: 'Orange' },
-      { name: 'MTN eSIM · 10 GB', termsKey: 'esim.localValid30', price: 5000, network: 'MTN', bonus: '+1 GB' },
-      { name: 'Moov eSIM · 3 GB', termsKey: 'esim.localValid30', price: 2000, network: 'Moov' },
-    ];
-  if (dest.code === 'WA')
-    return [
-      { name: 'West Africa · 5 GB', termsKey: 'esim.regionalValid', termsParams: { days: 15 }, price: 6500, network: 'Travel' },
-      { name: 'West Africa · 10 GB', termsKey: 'esim.regionalValid', termsParams: { days: 30 }, price: 11000, network: 'Travel', bonusKey: 'esim.bestValue' },
-    ];
-  if (dest.code === 'GL')
-    return [
-      { name: 'Global · 3 GB', termsKey: 'esim.travelGlobal', termsParams: { days: 15 }, price: 9000, network: 'Travel' },
-      { name: 'Global · 10 GB', termsKey: 'esim.travelGlobal', termsParams: { days: 30 }, price: 22000, network: 'Travel' },
-    ];
-  return [
-    { name: `${dest.name} · 1 GB`, termsKey: 'esim.travelValid', termsParams: { days: 7 }, price: 3500, network: 'Travel' },
-    { name: `${dest.name} · 3 GB`, termsKey: 'esim.travelValid', termsParams: { days: 15 }, price: 7500, network: 'Travel', bonusKey: 'esim.popular' },
-    { name: `${dest.name} · 10 GB`, termsKey: 'esim.travelValid', termsParams: { days: 30 }, price: 16000, network: 'Travel' },
-  ];
-};
+// eSIM plans expand per operator; the tiers live with the destinations so the
+// seeded catalogue and the app's local fallback cannot disagree.
+const esimFor = esimPlanSeed;
 
 export const destinationSeed = () =>
   ESIM_DESTINATIONS.map((d, i) => ({

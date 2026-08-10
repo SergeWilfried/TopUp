@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { C, F, VPN_LOCATIONS, fmtDate } from '@topup/core';
+import { C, F, fmtDate } from '@topup/core';
 import { BackHeader, Btn, Kicker, Tag, SummaryRow, st } from '../ui';
 
-export default function VpnScreen({ vpn, onBack, onSetup, onBuy, onRestore }) {
+export default function VpnScreen({ vpn, locations = [], onBack, onSetup, onBuy, onRestore }) {
   const { t } = useTranslation();
   if (!vpn) {
     return (
@@ -35,7 +35,7 @@ export default function VpnScreen({ vpn, onBack, onSetup, onBuy, onRestore }) {
           <Text style={{ fontFamily: F.heading, fontSize: 24, color: C.text }}>{vpn.plan}</Text>
           <View style={{ marginTop: 10 }}>
             <SummaryRow k={t('vpn.renews')} v={fmtDate(vpn.expiresAt)} />
-            <SummaryRow k={t('vpn.locations')} v={String(VPN_LOCATIONS.length)} />
+            <SummaryRow k={t('vpn.locations')} v={String(locations.length)} />
             <SummaryRow k={t('vpn.account')} v={vpn.email} />
           </View>
         </View>

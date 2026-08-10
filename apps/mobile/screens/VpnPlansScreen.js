@@ -1,10 +1,13 @@
 import React from 'react';
 import { View, Text, ScrollView } from 'react-native';
-import { C, F, vpnPlans, VPN_LOCATIONS } from '@topup/core';
+import { C, F } from '@topup/core';
 import { useTranslation } from 'react-i18next';
 import { BackHeader, Btn, Kicker, PackGrid, st } from '../ui';
 
-export default function VpnPlansScreen({ onBack, onSelect, onRestore }) {
+// Plans and locations are both server-side facts: the console can reprice or
+// retire either at any time, and checkout charges the stored price regardless
+// of what the app last saw.
+export default function VpnPlansScreen({ plans = [], locations = [], onBack, onSelect, onRestore }) {
   const { t } = useTranslation();
   return (
     <ScrollView style={{ flex: 1 }}>
@@ -21,11 +24,11 @@ export default function VpnPlansScreen({ onBack, onSelect, onRestore }) {
       </View>
 
       <View style={{ padding: 20, gap: 16 }}>
-        <PackGrid items={vpnPlans(t)} onSelect={onSelect} />
+        <PackGrid items={plans} onSelect={onSelect} />
 
         <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 8 }}>
-          <Kicker>{t('vpn.locationsIncluded', { count: VPN_LOCATIONS.length })}</Kicker>
-          <Text style={st.rowTitle}>{VPN_LOCATIONS.map((l) => l.name).join(' · ')}</Text>
+          <Kicker>{t('vpn.locationsIncluded', { count: locations.length })}</Kicker>
+          <Text style={st.rowTitle}>{locations.map((l) => l.name).join(' · ')}</Text>
           <Text style={st.subText}>
             {t('vpn.locationsBody')}
           </Text>

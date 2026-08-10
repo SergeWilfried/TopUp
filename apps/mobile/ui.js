@@ -1,7 +1,9 @@
 // Shared Modernist primitives and the single stylesheet every screen draws from.
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, S, F, fmt } from '@topup/core';
+import React, { useState } from 'react';
+import { View, Text, Pressable, StyleSheet, TextInput, Modal, ScrollView } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { C, S, F, fmt, flagFor, PAYABLE_COUNTRIES } from '@topup/core';
 
 export const Kicker = ({ children, light }) => (
   <Text style={[st.kicker, light && { color: 'rgba(243,242,242,0.85)' }]}>{children}</Text>
@@ -44,7 +46,9 @@ export const PackGrid = ({ items, onSelect }) => {
     <View style={st.grid}>
       {items.map((p) => (
         <Pressable
-          key={p.n}
+          // Keyed on the catalogue id: the same pack name exists once per
+          // network, so the display name alone collides.
+          key={p.id ?? p.n}
           onPress={() => onSelect(p)}
           style={({ pressed }) => [st.gridCell, pressed && { backgroundColor: C.accent100, borderColor: C.accent }]}
         >
@@ -61,6 +65,80 @@ export const PackGrid = ({ items, onSelect }) => {
         </Pressable>
       ))}
     </View>
+  );
+};
+
+/**
+ * Phone field with an explicit country.
+ *
+ * The dialling code is chosen rather than guessed. It decides which market the
+ * customer is charged in, and the device locale — the only other signal — is
+ * wrong for anyone travelling, on a foreign handset, or on a phone that was
+ * never set to their own country. The number itself stays national: it is the
+ * account identifier, and re-keying existing accounts to an international form
+ * would orphan every order already filed against them.
+ */
+export const PhoneInput = ({ value, onChangeText, country, onCountryChange, placeholder, style }) => {
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const [picking, setPicking] = useState(false);
+  const selected = PAYABLE_COUNTRIES.find((c) => c.code === country) ?? PAYABLE_COUNTRIES[0];
+
+  return (
+    <>
+      <View style={{ flexDirection: 'row', borderWidth: 2, borderColor: C.text }}>
+        <Pressable
+          onPress={() => setPicking(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t('auth.countryLabel')}
+          style={({ pressed }) => [st.dialCode, pressed && { backgroundColor: C.accent100 }]}
+        >
+          <Text style={{ fontSize: 17 }}>{flagFor(selected.code)}</Text>
+          <Text style={{ fontFamily: F.semi, fontSize: 15, color: C.text }}>+{selected.dial}</Text>
+          <Text style={{ fontFamily: F.body, fontSize: 11, color: C.muted }}>▾</Text>
+        </Pressable>
+        <TextInput
+          style={[st.input, { flex: 1, borderWidth: 0, fontSize: 18 }, style]}
+          value={value}
+          onChangeText={onChangeText}
+          keyboardType="phone-pad"
+          placeholder={placeholder}
+        />
+      </View>
+
+      <Modal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
+        {/* A modal is its own root view, so the screen's inset does not apply —
+            without this the header sits under the status bar. */}
+        <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: insets.top }}>
+          <BackHeader onBack={() => setPicking(false)} label={t('auth.countryLabel')} />
+          <ScrollView>
+            <View style={{ borderTopWidth: 2, borderColor: C.divider }}>
+              {PAYABLE_COUNTRIES.map((c) => (
+                <Pressable
+                  key={c.code}
+                  onPress={() => {
+                    onCountryChange(c.code);
+                    setPicking(false);
+                  }}
+                  style={({ pressed }) => [
+                    st.packRow,
+                    { paddingHorizontal: 20 },
+                    pressed && { backgroundColor: C.accent100 },
+                    c.code === selected.code && { backgroundColor: C.accent100 },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                    <Text style={{ fontSize: 20 }}>{flagFor(c.code)}</Text>
+                    <Text style={st.rowTitle}>{t(c.nameKey)}</Text>
+                  </View>
+                  <Text style={{ fontFamily: F.semi, fontSize: 15, color: C.muted }}>+{c.dial}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+    </>
   );
 };
 
@@ -130,6 +208,13 @@ export const st = StyleSheet.create({
   // letterSpacing must be explicit: without it iOS renders the placeholder
   // massively tracked out when a custom font is set.
   input: { minHeight: 48, backgroundColor: C.surface, borderWidth: 1, borderColor: C.divider, paddingHorizontal: 12, fontFamily: F.semi, fontSize: 16, letterSpacing: 0, color: C.text },
+  // Hairline rule between the code and the number, matching the pack grid's
+  // internal divisions rather than boxing the two controls separately.
+  dialCode: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, minHeight: 48,
+    borderRightWidth: 2, borderColor: C.text, backgroundColor: C.surface,
+  },
   toggleWrap: { flexDirection: 'row', borderWidth: 1, borderColor: C.divider },
   toggleOpt: { flex: 1, paddingVertical: 10, alignItems: 'center' },
   toggleLabel: { fontFamily: F.heading, fontSize: 13, letterSpacing: 0.8, color: 'rgba(32,30,29,0.65)' },

@@ -1,12 +1,21 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { C, F, VPN_LOCATIONS } from '@topup/core';
+import { C, F, flagFor } from '@topup/core';
 import { BackHeader, Kicker, Tag, st } from '../ui';
 
 // Step 01 of setup. One WireGuard tunnel is one server, so the customer picks a
 // location first and installs that config — then comes back for the next one.
-export default function VpnLocationsScreen({ added = [], email, justPurchased, onBack, onSelect }) {
+// `locations` are the active servers the API reports, not a bundled list: a
+// location the fleet no longer runs must not be offered.
+export default function VpnLocationsScreen({
+  locations = [],
+  added = [],
+  email,
+  justPurchased,
+  onBack,
+  onSelect,
+}) {
   const { t } = useTranslation();
   return (
     <ScrollView style={{ flex: 1 }}>
@@ -33,7 +42,7 @@ export default function VpnLocationsScreen({ added = [], email, justPurchased, o
 
       <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
         <View style={{ borderTopWidth: 2, borderColor: C.divider }}>
-          {VPN_LOCATIONS.map((l) => (
+          {locations.map((l) => (
             <Pressable
               key={l.code}
               onPress={() => onSelect(l)}
@@ -41,7 +50,11 @@ export default function VpnLocationsScreen({ added = [], email, justPurchased, o
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
                 <View style={lx.badge}>
-                  <Text style={lx.badgeText}>{l.code}</Text>
+                  {/* Falls back to the code when a flag cannot be formed, so an
+                      unrecognised location still reads as something. */}
+                  {flagFor(l.code)
+                    ? <Text style={lx.flag}>{flagFor(l.code)}</Text>
+                    : <Text style={lx.badgeText}>{l.code}</Text>}
                 </View>
                 <View>
                   <Text style={st.rowTitle}>{l.name}</Text>
@@ -60,7 +73,7 @@ export default function VpnLocationsScreen({ added = [], email, justPurchased, o
       <View style={{ paddingHorizontal: 20, paddingBottom: 24 }}>
         <Text style={st.subText}>
           {added.length
-            ? t('vpn.locProgress', { done: added.length, total: VPN_LOCATIONS.length })
+            ? t('vpn.locProgress', { done: added.length, total: locations.length })
             : t('vpn.locHint')}
         </Text>
       </View>
@@ -71,4 +84,7 @@ export default function VpnLocationsScreen({ added = [], email, justPurchased, o
 const lx = StyleSheet.create({
   badge: { width: 34, height: 34, borderWidth: 1.5, borderColor: C.text, alignItems: 'center', justifyContent: 'center' },
   badgeText: { fontFamily: F.heading, fontSize: 11, color: C.text },
+  // Emoji ignore fontFamily; the explicit line height keeps the glyph centred
+  // in the box rather than sitting low, which it does by default on Android.
+  flag: { fontSize: 19, lineHeight: 24 },
 });

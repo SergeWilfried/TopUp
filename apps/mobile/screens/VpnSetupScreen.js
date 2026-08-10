@@ -5,7 +5,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
-import { C, F, wgConfigFor, configFileName, mobileconfigUrl, WG_APP_STORE } from '@topup/core';
+import { C, F, configFileName, WG_APP_STORE } from '@topup/core';
 import { BackHeader, Btn, Kicker, Tag, st } from '../ui';
 
 const isIOS = Platform.OS === 'ios';
@@ -17,11 +17,16 @@ const Step = ({ n, children }) => (
   </View>
 );
 
-// Step 02 of setup — everything here is about one location's tunnel.
-export default function VpnSetupScreen({ token, loc, onBack, onExported, onAnother }) {
+/**
+ * Step 02 of setup — everything here is about one location's tunnel.
+ *
+ * `config` is the real WireGuard config the server issued for this device, and
+ * the server returns it exactly once. There is no way to re-derive it here, so
+ * the screen never regenerates it; losing it means provisioning again.
+ */
+export default function VpnSetupScreen({ config, loc, onBack, onExported, onAnother }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  const config = wgConfigFor(loc, token);
 
   // Writes a real .conf and hands it to the share sheet, which is how a
   // phone-only customer gets the file into WireGuard without a second screen.
@@ -94,24 +99,9 @@ export default function VpnSetupScreen({ token, loc, onBack, onExported, onAnoth
           />
         </View>
 
-        {isIOS && (
-          <View style={sx.card}>
-            <Kicker>{t('vpn.noAppKicker')}</Kicker>
-            <Text style={st.subText}>
-              {t('vpn.noAppBody')}
-            </Text>
-            <Step n="1">{t('vpn.noAppStep1')}</Step>
-            <Step n="2">{t('vpn.noAppStep2')}</Step>
-            <Btn
-              label={t('vpn.noAppCta')}
-              onPress={() => {
-                onExported(loc.code);
-                Linking.openURL(mobileconfigUrl(token, loc)).catch(() =>
-                  Alert.alert(t('vpn.safariError'), t('vpn.safariErrorBody')));
-              }}
-            />
-          </View>
-        )}
+        {/* The iOS "no app needed" route is not wired: it needs the API to serve a
+            signed .mobileconfig per peer, and no such endpoint exists yet. The
+            card is left out rather than pointed at a URL that 404s. */}
 
         <Btn variant="secondary" label={t('vpn.anotherLocation')} onPress={onAnother} />
         <Text style={st.subText}>

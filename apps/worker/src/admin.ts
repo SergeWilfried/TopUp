@@ -358,6 +358,51 @@ admin.get('/endpoints/:code/token', async (c) => {
   return c.json({ code, agentToken: await deriveAgentToken(c.env, code) });
 });
 
+/**
+ * Remaining airtime float at the distributor, per country.
+ *
+ * Airtime distribution fails first by running out of money rather than by
+ * breaking, so this is the number worth alerting on. Returns 503 rather than an
+ * empty list when the credentials are missing, so "not configured" cannot be
+ * mistaken for "nothing left".
+ */
+admin.get('/float', async (c) => {
+  const { checkBalance } = await import('./delivery');
+  const result = await checkBalance(c.env);
+  return result.ok
+    ? c.json({ balances: result.balances })
+    : c.json({ error: result.error }, result.error === 'not_configured' ? 503 : 502);
+});
+
+/**
+ * Drives the delivery state machine with fake providers. Development only.
+ *
+ * Exists because the one property that matters here — an ambiguous outcome is
+ * never retried — cannot be observed from a provider that always succeeds.
+ */
+admin.post('/dev/deliver/:orderId', async (c) => {
+  if (c.env.ENVIRONMENT === 'production') return c.json({ error: 'not_available' }, 403);
+  const { registerTestProviders } = await import('./delivery/testkit');
+  const { deliverOrder } = await import('./delivery');
+  registerTestProviders();
+  await deliverOrder(c.env, c.req.param('orderId'));
+  const order = await c.env.DB.prepare(
+    `SELECT id, status, delivery_provider, delivery_ref, delivery_error, delivery_attempts
+     FROM orders WHERE id = ?`,
+  )
+    .bind(c.req.param('orderId'))
+    .first();
+  return c.json(order ?? { error: 'not_found' });
+});
+
+admin.post('/dev/reconcile', async (c) => {
+  if (c.env.ENVIRONMENT === 'production') return c.json({ error: 'not_available' }, 403);
+  const { registerTestProviders } = await import('./delivery/testkit');
+  const { reconcileDeliveries } = await import('./delivery');
+  registerTestProviders();
+  return c.json({ resolved: await reconcileDeliveries(c.env) });
+});
+
 /** Loads fixtures into D1. Refuses to run against production. */
 admin.post('/dev/seed', async (c) => {
   if (c.env.ENVIRONMENT === 'production') return c.json({ error: 'not_available' }, 403);

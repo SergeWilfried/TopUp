@@ -5,7 +5,8 @@ import * as pawapay from './pawapay-api';
 import * as paystack from './paystack-api';
 import * as stripe from './stripe-api';
 import { isQuoteError, loadRates, quoteFor, type Quote } from './pricing';
-import { MOBILE_MONEY_CARRIERS, routeForCountry, toMinorUnits } from '@topup/core';
+import { canDeliver, deliverOrder } from '../delivery';
+import { MOBILE_MONEY_CARRIERS, diallingCodeFor, iso3For, routeForCountry, toMinorUnits } from '@topup/core';
 import { normaliseMsisdn } from '../vpn/auth';
 
 /**
@@ -36,13 +37,36 @@ type ProductRow = {
   price: number;
   days: number | null;
   enabled: number;
+  network: string | null;
 };
 
 const PROVIDERS = ['pawapay', 'paystack', 'stripe'] as const;
 type Provider = (typeof PROVIDERS)[number];
 
-const CARRIERS: Record<string, string> = { '07': 'Orange', '05': 'MTN', '01': 'Moov' };
-const carrierFor = (msisdn: string) => CARRIERS[msisdn.replace(/\D/g, '').slice(0, 2)] ?? null;
+/**
+ * Puts a national number into international form for provider prediction.
+ *
+ * The dialling code comes from the country doing the *paying*. A Burkinabè
+ * customer buying an eSIM for China pays on a +226 wallet; the destination has
+ * no bearing on the rail, and reading the prefix off the product would charge
+ * the wrong market — or nothing at all.
+ */
+const internationalise = (msisdn: string, payerCountry: string) => {
+  const raw = msisdn.trim();
+  const digits = raw.replace(/\D/g, '');
+
+  // Already international. Left exactly as given so the prediction reports the
+  // number's true country and the cross-check below can catch a mismatch —
+  // prefixing it again turned a Côte d'Ivoire number into a nonexistent
+  // Burkinabè one that would have failed opaquely at the provider.
+  if (raw.startsWith('+') || digits.startsWith('00')) return `+${digits.replace(/^00/, '')}`;
+
+  // A national number only means anything in its own country, so the buyer's
+  // dialling code is the right reading.
+  const code = diallingCodeFor(payerCountry);
+  if (!code) return null;
+  return `+${code}${digits.replace(/^0+/, '')}`;
+};
 
 /**
  * Finds or creates the telco account behind an MSISDN.
@@ -105,7 +129,18 @@ checkout.get('/methods', async (c) => {
 
 // ── start a purchase ───────────────────────────────────────────────────────
 checkout.post('/', async (c) => {
-  type Body = { productId?: string; msisdn?: string; email?: string; country?: string };
+  type Body = {
+    productId?: string;
+    /** The wallet being charged. Belongs to the buyer, whoever the order is for. */
+    msisdn?: string;
+    /** Where the pack is delivered, when that is not the buyer's own line. */
+    recipientMsisdn?: string;
+    /** ISO-2 of the recipient's line. Decides the dialling code at delivery. */
+    recipientCountry?: string;
+    email?: string;
+    /** Where the buyer is paying from — unrelated to where an eSIM is used. */
+    country?: string;
+  };
   const body = await c.req.json<Body>().catch((): Body => ({}));
 
   // The rail is derived from where the customer is, not chosen by the client:
@@ -117,6 +152,9 @@ checkout.post('/', async (c) => {
   const provider = route.provider as Provider;
 
   const msisdn = (body.msisdn ?? '').trim();
+  const recipientMsisdn = (body.recipientMsisdn ?? '').trim();
+  // Falls back to the buyer's country: topping up your own line is the common case.
+  const recipientCountry = (body.recipientCountry ?? country).toUpperCase();
   // Mobile money is charged to a handset; card rails are not.
   if (provider === 'pawapay' && msisdn.replace(/\D/g, '').length < 8)
     return c.json({ error: 'msisdn_invalid', field: 'msisdn' }, 400);
@@ -128,12 +166,50 @@ checkout.post('/', async (c) => {
   // A disabled product must not be purchasable, even by a stale client.
   if (!product.enabled) return c.json({ error: 'product_unavailable', field: 'productId' }, 409);
 
-  const carrier = provider === 'pawapay' ? carrierFor(msisdn) : null;
+  /**
+   * Which wallet to charge.
+   *
+   * PawaPay is asked rather than guessed: it returns the provider code, the
+   * country and the number in canonical form. The predicted country is then
+   * checked against the country we are pricing for — a Senegalese number sent
+   * with `country=BF` would otherwise be charged on the wrong market's rail.
+   */
+  let prediction: pawapay.Prediction | null = null;
   if (provider === 'pawapay') {
-    if (!carrier) return c.json({ error: 'carrier_unknown', field: 'msisdn' }, 400);
-    if (!pawapay.supportsCarrier(carrier))
-      return c.json({ error: 'carrier_unsupported', field: 'msisdn' }, 400);
+    const international = internationalise(msisdn, country);
+    if (!international) return c.json({ error: 'country_unsupported', field: 'country' }, 422);
+
+    prediction = await pawapay.predictProvider(c.env, international);
+    if (!prediction) return c.json({ error: 'carrier_unknown', field: 'msisdn' }, 400);
+
+    const expected = iso3For(country);
+    if (expected && prediction.country !== expected)
+      return c.json({ error: 'msisdn_country_mismatch', field: 'msisdn' }, 400);
   }
+  // Recorded against the customer for display; the rail uses the prediction.
+  const carrier = prediction ? prediction.provider : null;
+  /**
+   * Refuse an order nothing can deliver, before any money moves.
+   *
+   * Payability and deliverability are separate questions — a Kenyan number is
+   * perfectly chargeable and has no airtime rail — and discovering the second
+   * one after capture leaves a charged customer awaiting a refund.
+   */
+  if (product.type === 'airtime' || product.type === 'data') {
+    const deliverable = canDeliver(c.env, {
+      orderId: 'preflight',
+      product: product.type,
+      sku: product.id,
+      amount: product.price,
+      msisdn: recipientMsisdn || msisdn,
+      country: recipientCountry,
+      network: product.network,
+    });
+    if (!deliverable) {
+      return c.json({ error: 'recipient_undeliverable', field: 'recipientMsisdn' }, 422);
+    }
+  }
+
   // Card rails need somewhere to send the receipt.
   if (provider !== 'pawapay' && !body.email) return c.json({ error: 'email_required', field: 'email' }, 400);
 
@@ -152,9 +228,19 @@ checkout.post('/', async (c) => {
 
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO orders (id, customer_id, product, sku, detail, amount, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-    ).bind(orderId, customerId, product.type, product.id, name, amount, now()),
+      `INSERT INTO orders (id, customer_id, product, sku, detail, amount, status, created_at, recipient_msisdn, recipient_country)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+    ).bind(
+      orderId,
+      customerId,
+      product.type,
+      product.id,
+      name,
+      amount,
+      now(),
+      recipientMsisdn ? normaliseMsisdn(recipientMsisdn) : null,
+      recipientCountry,
+    ),
     c.env.DB.prepare(
       `INSERT INTO payments (id, order_id, provider, provider_ref, amount, currency, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
@@ -176,8 +262,12 @@ checkout.post('/', async (c) => {
     const result = await pawapay.createDeposit(c.env, {
       depositId: paymentId,
       amount: quote.amount,
-      msisdn,
-      carrier: carrier!,
+      // The market's currency, not a constant: the same code has to serve XOF
+      // in Ouagadougou and RWF in Kigali.
+      currency: quote.currency,
+      phoneNumber: prediction!.msisdn,
+      provider: prediction!.provider,
+      orderId,
       description: name,
     });
     if (!result.ok) return fail(result.error);
@@ -220,7 +310,49 @@ checkout.post('/', async (c) => {
 });
 
 // ── status ─────────────────────────────────────────────────────────────────
+// How long a provider answer is reused for. Client polling is the app's source
+// of truth, so without this each poll would be an API call to the provider.
+const RECONCILE_EVERY_MS = 4000;
+
+/**
+ * Brings a still-pending payment up to date from the provider.
+ *
+ * Callbacks are the fast path, but they get lost and they are not signed. If
+ * the only route to `delivered` were a callback, one dropped request would
+ * leave a paying customer watching a spinner until the app gave up.
+ */
+async function reconcile(env: Env, orderId: string) {
+  const payment = await env.DB.prepare(
+    `SELECT p.id, p.provider, p.status, p.checked_at
+     FROM payments p JOIN orders o ON o.id = p.order_id
+     WHERE o.id = ? AND o.status = 'pending' AND p.status = 'pending'
+     ORDER BY p.created_at DESC LIMIT 1`,
+  )
+    .bind(orderId)
+    .first<{ id: string; provider: string; status: string; checked_at: number | null }>();
+
+  // Only PawaPay is reconciled on read so far; the card rails still rely on
+  // their callbacks, which arrive over a channel we control the return URL for.
+  if (!payment || payment.provider !== 'pawapay') return;
+  if (payment.checked_at && now() - payment.checked_at < RECONCILE_EVERY_MS) return;
+
+  await env.DB.prepare(`UPDATE payments SET checked_at = ? WHERE id = ?`).bind(now(), payment.id).run();
+
+  const state = await pawapay.fetchDeposit(env, payment.id);
+  if (state.status === 'captured') await fulfil(env, payment.id, state.amount);
+  else if (state.status === 'failed') {
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE payments SET status = 'failed' WHERE id = ? AND status = 'pending'`).bind(payment.id),
+      env.DB.prepare(
+        `UPDATE orders SET status = 'failed', failure_reason = COALESCE(failure_reason, 'provider_failed') WHERE id = ? AND status = 'pending'`,
+      ).bind(orderId),
+    ]);
+  }
+}
+
 checkout.get('/:orderId', async (c) => {
+  await reconcile(c.env, c.req.param('orderId'));
+
   const order = await c.env.DB.prepare(
     `SELECT o.id, o.status, o.detail, o.amount, o.failure_reason AS failureReason,
             p.provider, p.status AS paymentStatus
@@ -282,14 +414,29 @@ async function fulfil(env: Env, paymentId: string, paidAmount: number | null) {
     .run();
   if (claim.meta.changes === 0) return { ok: true, reason: 'already_settled' };
 
-  await env.DB.prepare(`UPDATE orders SET status = 'delivered', delivered_at = ? WHERE id = ?`)
-    .bind(now(), payment.orderId)
+  // Paid, not delivered. Those are different events and conflating them meant
+  // every dashboard figure counted money taken as goods shipped, and a top-up
+  // that never reached the customer looked identical to one that did.
+  await env.DB.prepare(`UPDATE orders SET status = 'paid' WHERE id = ?`)
+    .bind(payment.orderId)
     .run();
 
-  if (payment.product === 'vpn') await grantVpn(env, payment.orderId, payment.sku);
-  // Airtime, data and eSIM delivery is a downstream carrier call; the order is
-  // marked delivered here because nothing else models that step yet.
-  return { ok: true, reason: 'delivered' };
+  // VPN is delivered by this Worker — the grant is a row we own, so it is
+  // immediate and cannot half-happen.
+  if (payment.product === 'vpn') {
+    await grantVpn(env, payment.orderId, payment.sku);
+    await env.DB.prepare(`UPDATE orders SET status = 'delivered', delivered_at = ? WHERE id = ?`)
+      .bind(now(), payment.orderId)
+      .run();
+    return { ok: true, reason: 'delivered' };
+  }
+
+  // Airtime, data and eSIM go to an external rail. Deliberately awaited rather
+  // than fired into the background: a Worker stops executing once it responds,
+  // so a floating promise here would be cancelled mid-request and leave the
+  // order stuck in `delivering` with no provider reference to reconcile.
+  await deliverOrder(env, payment.orderId);
+  return { ok: true, reason: 'paid' };
 }
 
 /** Adds subscription time for a VPN purchase, keyed to the buyer's email. */

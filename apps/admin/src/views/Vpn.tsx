@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fmtDate, fmtN } from '@topup/core';
+import { flagFor, fmtDate, fmtN } from '@topup/core';
 import { ApiError, apiSend, type Subscription, type SubscriptionPage } from '../api';
 import { useApi } from '../useApi';
 import { KpiStrip, Meter, PageHead, Pager, Panel, SecHead, Seg, SubTag } from '../components/Bits';
@@ -207,7 +207,10 @@ export default function Vpn() {
             <div className="dist" style={{ marginTop: 14 }}>
               {(d?.installsByLocation ?? []).map((l) => (
                 <div className="dist-row" key={l.code}>
-                  <span className="lead">{l.name}</span>
+                  <span className="lead">
+                    {flagFor(l.code) ? `${flagFor(l.code)} ` : ''}
+                    {l.name}
+                  </span>
                   <span className="track">
                     <i style={{ width: `${(l.installs / peak) * 100}%` }} />
                   </span>

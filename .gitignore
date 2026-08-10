@@ -5,3 +5,7 @@ dist/
 .DS_Store
 *.log
 .dev.vars
+# Local env overrides. A tracked .env.local is loaded by production builds too,
+# so committing one silently overrides the CI value.
+.env.local
+.env.*.local

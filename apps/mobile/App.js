@@ -3,17 +3,34 @@
 // Navigation is a simple screen state machine; swap for react-navigation if preferred.
 // Tab destinations live in ./screens; shared primitives in ./ui; catalogue in ./data.
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Linking, StatusBar, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Clipboard from 'expo-clipboard';
+import * as WebBrowser from 'expo-web-browser';
 import { useFonts, Archivo_400Regular, Archivo_600SemiBold, Archivo_800ExtraBold } from '@expo-google-fonts/archivo';
 import { useTranslation } from 'react-i18next';
 import './i18n';
 import { loadStoredLanguage } from './i18n';
 
-import { C, F, fmt, fmtN, CARRIERS, detect, ussdFor, dataPacks, airtimePacks, esimCountries, esimPlansFor, navItems, TAB_SCREENS, SEEN_ONBOARDING, VPN_STORE } from '@topup/core';
-import { Btn, BackHeader, Kicker, Tag, PackGrid, SummaryRow, Toggle2, TabBar, Brand, st } from './ui';
+import { C, F, fmt, fmtN, CARRIERS, detect, flagFor, navItems, networksFor, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
+import {
+  ApiError,
+  catalogue as fetchCatalogue,
+  esimPlans as fetchEsimPlans,
+  loadSession,
+  me,
+  myOrders,
+  provisionPeer,
+  requestCode,
+  signOut as apiSignOut,
+  startCheckout,
+  verifyCode,
+  vpnServers,
+  waitForOrder,
+  paymentMethods,
+} from './api';
+import { detectCountry, deviceCountry, formatMoney, methodsFor } from './payment';
+import { Btn, BackHeader, Kicker, Tag, PackGrid, PhoneInput, SummaryRow, Toggle2, TabBar, Brand, st } from './ui';
 import Onboarding from './screens/Onboarding';
 import HomeScreen from './screens/HomeScreen';
 import HistoryScreen from './screens/HistoryScreen';
@@ -27,94 +44,190 @@ import VpnScreen from './screens/VpnScreen';
 import VpnRecoverScreen from './screens/VpnRecoverScreen';
 import LanguageScreen from './screens/LanguageScreen';
 
-// Seeded demo data. Sign-out restores these so the next session never inherits
-// the previous account's history, points, eSIMs or VPN.
-const SEED_ESIMS = [
-  { id: 1, label: 'Orange · Personal', iccid: 'ICCID ···· 8842', status: 'active', dataLeft: '2.4 GB', renew: 'Renews Sep 01' },
-  { id: 2, label: 'Travel · West Africa', iccid: 'ICCID ···· 3317', status: 'paused', dataLeft: '4.8 GB', renew: 'Expires Aug 21' },
-];
-const SEED_HISTORY = [
-  { desc: '1 GB · 7 days', meta: 'AUG 06 · Orange · 07 09 55 12 34', amount: '500 FCFA', status: 'DELIVERED' },
-  { desc: '2 000 FCFA airtime', meta: 'AUG 04 · MTN · 05 44 21 78 90', amount: '2 000 FCFA', status: 'DELIVERED' },
-  { desc: '150 MB · 24 h', meta: 'AUG 02 · Moov · 01 02 33 47 65', amount: '200 FCFA', status: 'DELIVERED' },
-  { desc: '3 GB · 30 days', meta: 'JUL 28 · Orange · 07 09 55 12 34', amount: '1 500 FCFA', status: 'DELIVERED' },
-];
-const SEED_POINTS = 1240;
-const SEED_PHONE = '07 09 55 12 34';
+// Which locations have been exported into WireGuard on this handset. Local by
+// nature: the server knows the peer exists, not whether the file was imported.
+const VPN_ADDED_STORE = 'topup.vpn.added';
+
+/**
+ * A catalogue product as the pack grid wants it.
+ *
+ * `id` is carried through because checkout identifies the purchase by product,
+ * never by price — the server re-reads the price from its own row, so a stale
+ * or tampered client cannot change what is charged.
+ */
+const toPack = (p) => ({
+  id: p.id,
+  n: p.name,
+  v: p.terms,
+  p: p.price,
+  b: p.bonus,
+  days: p.days,
+  carrier: p.network,
+});
+
+/** An order row as the history list wants it. */
+const toHistoryRow = (o, t) => ({
+  desc: o.detail,
+  meta: `${new Date(o.createdAt).toLocaleDateString()} · ${String(o.product).toUpperCase()}`,
+  amount: fmt(o.amount),
+  status: t(`common.orderStatus.${o.status}`, String(o.status).toUpperCase()),
+});
 
 function TopUp() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const [fontsLoaded] = useFonts({ Archivo_400Regular, Archivo_600SemiBold, Archivo_800ExtraBold });
   const [screen, setScreen] = useState('onboarding');
   const [authFrom, setAuthFrom] = useState('onboarding'); // where "back" from sign-in returns to
   const [service, setService] = useState('data');
   const [forSelf, setForSelf] = useState(true);
-  const [phone, setPhone] = useState(SEED_PHONE);
+  const [phone, setPhone] = useState('');
+  const [myNumber, setMyNumber] = useState(''); // the account's own MSISDN, for "top up myself"
   const [carrier, setCarrier] = useState('Orange');
   const [pack, setPack] = useState(null);
   const [pay, setPay] = useState(null); // method id, chosen from what the region supports
   const [paying, setPaying] = useState(false);
-  const [ussdStep, setUssdStep] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [points, setPoints] = useState(SEED_POINTS);
+  const [points, setPoints] = useState(0);
   const [otp, setOtp] = useState('');
   const [otpError, setOtpError] = useState(null); // error code, or null
   const [verifying, setVerifying] = useState(false);
   const [email, setEmail] = useState(''); // where VPN configs get delivered
   const [esimCountry, setEsimCountry] = useState('Côte d’Ivoire');
   const [countrySearch, setCountrySearch] = useState('');
-  const [esims, setEsims] = useState(SEED_ESIMS);
-  const [history, setHistory] = useState(SEED_HISTORY);
+  const [esims, setEsims] = useState([]);
+  const [history, setHistory] = useState([]);
   const [booted, setBooted] = useState(false);
-  const [vpn, setVpn] = useState(null); // active VPN subscription, once purchased
+  const [vpn, setVpn] = useState(null); // active VPN subscription, from /me
   const [vpnLoc, setVpnLoc] = useState(null); // location being installed (setup step 02)
+  const [vpnConfig, setVpnConfig] = useState(null); // the peer config, returned once
   const [vpnAdded, setVpnAdded] = useState([]); // location codes exported on this phone
   const [vpnFresh, setVpnFresh] = useState(false); // show the post-purchase banner once
+  const [vpnBusy, setVpnBusy] = useState(false);
   const [recoverFrom, setRecoverFrom] = useState('vpnPlans'); // where the recovery page returns to
+  // Server-owned data. Null until loaded so screens can tell "empty" from "not yet".
+  const [cat, setCat] = useState(null); // /catalogue
+  const [locations, setLocations] = useState([]); // /servers
+  const [esimPlanList, setEsimPlanList] = useState([]);
+  const [payError, setPayError] = useState(null);
+  const [order, setOrder] = useState(null); // in-flight purchase
+  const [quote, setQuote] = useState(null); // what this market is actually charged
 
-  // Returning devices skip the intro, and pick their VPN back up where it was.
+  /**
+   * The country of the number being signed in with, and therefore of the wallet
+   * that pays. Seeded from the handset's region, then owned by the picker —
+   * device locale is wrong for anyone abroad or on a second-hand phone.
+   */
+  const [dialCountry, setDialCountry] = useState(() => deviceCountry() ?? 'CI');
+  // Where a top-up is delivered, which need not be where it is paid from.
+  const [recipientCountry, setRecipientCountry] = useState(() => deviceCountry() ?? 'CI');
+
+  /**
+   * Where the *buyer* is, which is what decides the rail.
+   *
+   * Deliberately not derived from `phone`: that field holds whoever the order
+   * is for — a friend's line for a top-up, nothing at all for an eSIM bound for
+   * China. The picker wins over everything, since it is the one signal the
+   * customer actually stated.
+   *
+   * Declared up here because the quote effect depends on it, and every hook has
+   * to run before the font/boot guard returns.
+   */
+  const country = detectCountry({ chosen: dialCountry, msisdn: myNumber });
+
+  /**
+   * What this market will actually be charged.
+   *
+   * Catalogue prices are XOF, but a customer paying by card settles in their
+   * own currency — showing FCFA on the payment step would name a figure that
+   * never appears on their statement. The server owns the conversion, so it is
+   * asked rather than approximated here.
+   */
+  useEffect(() => {
+    if (screen !== 'pay' || !pack?.id) { setQuote(null); return; }
+    let alive = true;
+    paymentMethods(country, pack.id)
+      .then((r) => alive && setQuote(r.quote ?? null))
+      .catch(() => alive && setQuote(null));
+    return () => { alive = false; };
+  }, [screen, pack?.id, country]);
+
+  /**
+   * Pulls everything the signed-in account owns.
+   *
+   * The subscription, orders and points are all server state now — the app
+   * holds no authoritative copy, so a purchase made elsewhere, an expiry, or a
+   * refund shows up here without the app having to guess.
+   */
+  const refreshAccount = React.useCallback(async () => {
+    const [account, orders] = await Promise.all([
+      me().catch(() => null),
+      myOrders(i18n.language?.slice(0, 2)).catch(() => null),
+    ]);
+    if (account) {
+      setMyNumber(account.msisdn || '');
+      setPhone((p) => p || account.msisdn || '');
+      if (account.email) setEmail((e) => e || account.email);
+      setVpn(
+        account.subscriptionActive
+          ? {
+              expiresAt: account.subExpiresAt,
+              email: account.email,
+              peers: account.peers ?? [],
+              deviceLimit: account.deviceLimit,
+            }
+          : null,
+      );
+    }
+    if (orders) {
+      setPoints(orders.points ?? 0);
+      setHistory((orders.orders ?? []).map((o) => toHistoryRow(o, t)));
+    }
+  }, [t]);
+
+  // Catalogue and locations are public, so they load before sign-in — the
+  // plans and packs are browsable without an account.
   useEffect(() => {
     let alive = true;
+    const lang = i18n.language?.slice(0, 2) || 'en';
     Promise.all([
       loadStoredLanguage(),
-      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_STORE]).catch(() => []),
-      // A stored session skips sign-in on relaunch.
+      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE]).catch(() => []),
       loadSession().catch(() => null),
-    ])
-      .then(([, pairs, token]) => {
-        if (token && alive) setScreen('home');
-        if (!alive) return;
-        const stored = Object.fromEntries(pairs || []);
-        if (stored[SEEN_ONBOARDING]) { setScreen('welcome'); setAuthFrom('welcome'); }
-        try {
-          const saved = stored[VPN_STORE] && JSON.parse(stored[VPN_STORE]);
-          if (saved?.vpn?.token) {
-            setVpn(saved.vpn);
-            setVpnAdded(saved.added || []);
-          }
-        } catch {
-          // Corrupt record — start clean rather than block launch.
-        }
-        setBooted(true);
-      });
-    return () => { alive = false; };
-  }, []);
+      fetchCatalogue(lang).catch(() => null),
+      vpnServers().catch(() => null),
+    ]).then(async ([, pairs, token, catalogueData, servers]) => {
+      if (!alive) return;
+      const stored = Object.fromEntries(pairs || []);
+      if (stored[SEEN_ONBOARDING]) { setScreen('welcome'); setAuthFrom('welcome'); }
+      try {
+        setVpnAdded(JSON.parse(stored[VPN_ADDED_STORE] || '[]'));
+      } catch {
+        // Corrupt record — start clean rather than block launch.
+      }
+      if (catalogueData) setCat(catalogueData);
+      if (servers) setLocations(servers.servers ?? []);
 
-  // Mirror the subscription to disk whenever it moves. Gated on `booted` so the
-  // initial empty state can never overwrite what we just read back.
+      // A stored session skips sign-in on relaunch, but only if it still works:
+      // the token may have expired or been signed out on another device.
+      if (token) {
+        await refreshAccount().catch(() => {});
+        if (alive) setScreen('home');
+      }
+      if (alive) setBooted(true);
+    });
+    return () => { alive = false; };
+  }, [refreshAccount]);
+
+  // Which locations this handset has exported is genuinely local — the server
+  // knows the peers exist, not which ones made it into WireGuard here.
   useEffect(() => {
     if (!booted) return;
-    if (vpn) AsyncStorage.setItem(VPN_STORE, JSON.stringify({ vpn, added: vpnAdded })).catch(() => {});
-    else AsyncStorage.removeItem(VPN_STORE).catch(() => {});
-  }, [booted, vpn, vpnAdded]);
+    AsyncStorage.setItem(VPN_ADDED_STORE, JSON.stringify(vpnAdded)).catch(() => {});
+  }, [booted, vpnAdded]);
 
   if (!fontsLoaded || !booted) return null;
 
   const momoName = carrier === 'MTN' ? 'MTN MoMo' : carrier + ' Money';
-  // Rails are regional — a Stripe button in Abidjan cannot be charged, because
-  // Stripe does not settle XOF. Ask where we are before offering anything.
-  const country = detectCountry({ msisdn: phone });
   const payment = methodsFor(country);
   // Default to the first method the region actually offers.
   const method = payment.methods.find((m) => m.id === pay) ?? payment.methods[0] ?? null;
@@ -123,35 +236,51 @@ function TopUp() {
   const digits = phone.replace(/\D/g, '');
   const isVpn = service === 'vpn';
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const finishPay = () => {
+
+  /**
+   * Runs a real purchase.
+   *
+   * The server decides the rail from the country and re-reads the price from
+   * its own catalogue, so nothing here can change what is charged. Mobile money
+   * resolves when the customer approves the prompt on their handset; card rails
+   * hand off to a browser. Either way the outcome is read back from
+   * GET /checkout/:orderId rather than assumed from the redirect.
+   */
+  const finishPay = async () => {
+    const renewing = isVpn && !!vpn;
     setPaying(true);
-    setTimeout(() => {
-      const isEsim = service === 'esim';
-      setHistory((h) => [
-        {
-          desc: isVpn || isEsim ? pack.n : pack.n + ' · ' + pack.v,
-          meta: 'AUG 08 · ' + (isVpn ? 'VPN · ' + email.trim() : carrier + (isEsim ? ' · New eSIM' : ' · ' + phone)),
-          amount: fmt(pack.p),
-          status: t('common.delivered'),
-        },
-        ...h,
-      ]);
-      setPoints((p) => p + earnPts);
-      setPaying(false);
-      setUssdStep(false);
-      setCopied(false);
+    setPayError(null);
+    try {
+      const started = await startCheckout({
+        productId: pack.id,
+        country,
+        // The wallet charged is always the buyer's own. Sending the recipient's
+        // number here would push the approval prompt to them instead.
+        msisdn: isMomo ? myNumber || phone : undefined,
+        // Only meaningful when topping up someone else's line.
+        recipientMsisdn: !isVpn && service !== 'esim' && phone !== myNumber ? phone : undefined,
+        // The picker's value: delivery needs the recipient's dialling code, and
+        // it is not always the buyer's.
+        recipientCountry,
+        email: emailOk ? email.trim() : undefined,
+      });
+      setOrder(started);
+
+      if (started.action === 'redirect' && started.url) {
+        await WebBrowser.openBrowserAsync(started.url).catch(() => {});
+      }
+
+      const final = await waitForOrder(started.orderId);
+      if (final.status !== 'delivered') {
+        setPayError(final.failureReason || `order_${final.status}`);
+        return;
+      }
+
+      // Points, history and subscription all come back from the server rather
+      // than being incremented locally, so the app cannot drift from the books.
+      await refreshAccount();
+      setOrder(null);
       if (isVpn) {
-        const renewing = !!vpn;
-        setVpn((v) => ({
-          plan: pack.n + ' VPN',
-          // Extend from the current end date when it is still in the future,
-          // otherwise from today — a lapsed customer does not get free days back.
-          expiresAt: Math.max(v?.expiresAt ?? 0, Date.now()) + pack.days * 86400000,
-          email: v?.email || email.trim(),
-          // The token seeds every config, so reissuing it would silently break
-          // every tunnel the customer already installed. A renewal keeps it.
-          token: v?.token || 'tk_' + Date.now().toString(36),
-        }));
         // Renewing changes nothing they have to re-scan, so don't send them
         // back through setup — only a first purchase needs that.
         setVpnFresh(!renewing);
@@ -159,7 +288,11 @@ function TopUp() {
       } else {
         setScreen('success');
       }
-    }, 1400);
+    } catch (e) {
+      setPayError(e instanceof ApiError ? e.code : 'network_error');
+    } finally {
+      setPaying(false);
+    }
   };
   // Sign-out must actually clear the session: the VPN record is persisted, so
   // leaving it behind would hand the next person on this handset a paid
@@ -170,21 +303,24 @@ function TopUp() {
       {
         text: t('profile.signOutConfirm'),
         style: 'destructive',
-        onPress: () => {
+        onPress: async () => {
+          // Revoke server-side first: dropping only the local copy would leave
+          // a working token behind on a handset being handed on.
+          await apiSignOut().catch(() => {});
           setVpn(null);
           setVpnAdded([]);
           setVpnLoc(null);
+          setVpnConfig(null);
           setVpnFresh(false);
-          setEsims(SEED_ESIMS);
-          setHistory(SEED_HISTORY);
-          setPoints(SEED_POINTS);
-          setPhone(SEED_PHONE);
+          setEsims([]);
+          setHistory([]);
+          setPoints(0);
+          setPhone('');
           setCarrier('Orange');
           setEmail('');
           setPack(null);
           setService('data');
           setPay(null);
-          setUssdStep(false);
           setOtp('');
           setOtpError(false);
           setAuthFrom('welcome');
@@ -196,10 +332,27 @@ function TopUp() {
 
   const doPay = () => {
     if (paying || !pack || (isVpn && !emailOk)) return;
-    if (isMomo && !ussdStep) { setUssdStep(true); setCopied(false); return; }
     finishPay();
   };
-  const packs = service === 'airtime' ? airtimePacks(t) : dataPacks(t);
+  /**
+   * Networks available on the recipient's line. Only Côte d'Ivoire has prefix
+   * hints, because that is the only numbering plan we actually hold.
+   */
+  const networkOptions =
+    recipientCountry === 'CI'
+      ? CARRIERS
+      : networksFor(recipientCountry).map((name) => ({ name, prefix: null }));
+
+  // The deal tile and the button under it must name the same catalogue line.
+  const deal = (cat?.data ?? []).find((d) => d.bonus) ?? cat?.data?.[0] ?? null;
+
+  // Airtime and data are a separate SKU on every network, so the catalogue
+  // carries one row per carrier. Showing them all put three "150 MB" tiles
+  // under an "MTN" heading; the list is the selected network's only.
+  const packs =
+    (service === 'airtime' ? cat?.airtime : cat?.data)
+      ?.filter((p) => !p.network || p.network === carrier)
+      .map(toPack) ?? [];
   const goBuy = (svc) => { setService(svc); setForSelf(true); setScreen('recipient'); };
   const openPack = (p) => { setPack(p); setScreen('pay'); };
   const showNav = TAB_SCREENS.includes(screen);
@@ -250,7 +403,13 @@ function TopUp() {
             <Text style={st.h2}>{t('auth.title')}</Text>
             <View>
               <Text style={st.fieldLabel}>{t('auth.phoneLabel')}</Text>
-              <TextInput style={[st.input, { fontSize: 18 }]} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder={t('auth.phonePlaceholder')} />
+              <PhoneInput
+                value={phone}
+                onChangeText={setPhone}
+                country={dialCountry}
+                onCountryChange={setDialCountry}
+                placeholder={t('auth.phonePlaceholder')}
+              />
               {detect(phone) ? <Text style={{ color: C.accent, fontSize: 12, marginTop: 6, fontFamily: F.body }}>{t('auth.detected', { carrier: detect(phone) })}</Text> : null}
             </View>
             <Btn
@@ -309,6 +468,7 @@ function TopUp() {
                 setOtpError(null);
                 try {
                   await verifyCode(phone, otp);
+                  await refreshAccount();
                   setScreen('home');
                 } catch (e) {
                   setOtpError(e instanceof ApiError ? e.code : 'network_error');
@@ -326,8 +486,16 @@ function TopUp() {
         <HomeScreen
           points={points}
           history={history}
+          deal={deal ? toPack(deal) : null}
           onBuy={goBuy}
-          onDailyDeal={() => { setService('data'); setPack({ n: '2 GB · Daily deal', v: 'Valid 7 days', p: 800 }); setScreen('pay'); }}
+          // The deal has to be a real catalogue line: checkout buys a product id,
+          // and a hand-built pack has nothing to charge against.
+          onDailyDeal={() => {
+            if (!deal) return;
+            setService('data');
+            setPack(toPack(deal));
+            setScreen('pay');
+          }}
           onVpn={() => setScreen(vpn ? 'vpn' : 'vpnPlans')}
           hasVpn={!!vpn}
         />
@@ -359,22 +527,35 @@ function TopUp() {
             <Toggle2
               opts={[{ label: t('recipient.forMyself'), val: true }, { label: t('recipient.someoneElse'), val: false }]}
               value={forSelf}
-              onChange={(v) => { setForSelf(v); setPhone(v ? SEED_PHONE : ''); }}
+              onChange={(v) => { setForSelf(v); setPhone(v ? myNumber : ''); }}
             />
             <View>
               <Text style={st.fieldLabel}>{t('auth.phoneLabel')}</Text>
-              <TextInput
-                style={st.input} value={phone} keyboardType="phone-pad" placeholder={t('auth.phonePlaceholder')}
-                onChangeText={(t) => { setPhone(t); const d = detect(t); if (d) setCarrier(d); }}
+              {/* The recipient can be in another country — a top-up sent home
+                  from abroad — so this picker is the delivery country and is
+                  kept separate from the one that decides the payment rail. */}
+              <PhoneInput
+                value={phone}
+                onChangeText={(v) => { setPhone(v); const d = detect(v); if (d) setCarrier(d); }}
+                country={recipientCountry}
+                onCountryChange={setRecipientCountry}
+                placeholder={t('auth.phonePlaceholder')}
               />
             </View>
             <View>
               <Text style={st.fieldLabel}>{t('recipient.networkLabel')}{detect(phone) ? <Text style={{ color: C.accent }}>{t('recipient.detectedSuffix')}</Text> : null}</Text>
+              {/* Networks follow the recipient's country. These used to be the
+                  three Ivorian carriers with Ivorian prefix hints regardless,
+                  so a +226 number was offered Orange/MTN/Moov "PRÉFIXE 07".
+                  Prefix hints only exist for the home market, so they are only
+                  shown there. */}
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                {CARRIERS.map((c) => (
+                {networkOptions.map((c) => (
                   <Pressable key={c.name} onPress={() => setCarrier(c.name)} style={[st.carrierCell, carrier === c.name && { borderColor: C.accent, backgroundColor: C.accent100 }]}>
                     <Text style={{ fontFamily: F.heading, fontSize: 14, color: C.text }}>{c.name}</Text>
-                    <Text style={[st.subText, { fontSize: 10 }]}>{t('recipient.prefix', { prefix: c.prefix })}</Text>
+                    {c.prefix ? (
+                      <Text style={[st.subText, { fontSize: 10 }]}>{t('recipient.prefix', { prefix: c.prefix })}</Text>
+                    ) : null}
                   </Pressable>
                 ))}
               </View>
@@ -415,13 +596,14 @@ function TopUp() {
 
       {screen === 'vpnPlans' && (
         <VpnPlansScreen
+          plans={(cat?.vpn ?? []).map(toPack)}
+          locations={locations}
           onBack={() => setScreen(vpn ? 'vpn' : 'home')}
           onRestore={() => { setRecoverFrom('vpnPlans'); setScreen('vpnRecover'); }}
           onSelect={(plan) => {
             setService('vpn');
             setPack(plan);
             setPay(null);
-            setUssdStep(false);
             if (vpn) setEmail(vpn.email); // renewals keep the delivery address
             setScreen('pay');
           }}
@@ -431,6 +613,7 @@ function TopUp() {
       {screen === 'vpn' && (
         <VpnScreen
           vpn={vpn}
+          locations={locations}
           onBack={() => setScreen('profile')}
           onSetup={() => { setVpnFresh(false); setScreen('vpnLocations'); }}
           onBuy={() => setScreen('vpnPlans')}
@@ -440,17 +623,43 @@ function TopUp() {
 
       {screen === 'vpnLocations' && vpn && (
         <VpnLocationsScreen
+          locations={locations}
           added={vpnAdded}
-          email={vpn.email}
+          // /me only knows an email once the account has one; a customer who
+          // signed in by phone and typed a delivery address at checkout has
+          // none linked. Deliberately not linked server-side from an
+          // unauthenticated checkout — that would let anyone attach their own
+          // address to someone else's number and then sign in as them.
+          email={vpn.email || email}
           justPurchased={vpnFresh}
           onBack={() => { setVpnFresh(false); setScreen('vpn'); }}
-          onSelect={(l) => { setVpnLoc(l); setVpnFresh(false); setScreen('vpnSetup'); }}
+          onSelect={async (l) => {
+            if (vpnBusy) return;
+            setVpnBusy(true);
+            setVpnFresh(false);
+            try {
+              // The server issues the keys and returns the config exactly once,
+              // so it is held in memory for this screen only — there is nothing
+              // to re-derive it from if we drop it.
+              const peer = await provisionPeer(l.code);
+              setVpnLoc(l);
+              setVpnConfig(peer.conf);
+              setScreen('vpnSetup');
+            } catch (e) {
+              Alert.alert(
+                t('vpn.provisionError'),
+                t(`vpn.error.${e instanceof ApiError ? e.code : 'network_error'}`, t('vpn.provisionErrorBody')),
+              );
+            } finally {
+              setVpnBusy(false);
+            }
+          }}
         />
       )}
 
-      {screen === 'vpnSetup' && vpn && vpnLoc && (
+      {screen === 'vpnSetup' && vpn && vpnLoc && vpnConfig && (
         <VpnSetupScreen
-          token={vpn.token}
+          config={vpnConfig}
           loc={vpnLoc}
           onBack={() => setScreen('vpnLocations')}
           onAnother={() => setScreen('vpnLocations')}
@@ -499,7 +708,16 @@ function TopUp() {
               <SummaryRow k={t('pay.to')} v={isVpn ? t('pay.vpnSubscription') : service === 'esim' ? t('pay.newEsim') : (forSelf ? t('pay.myNumber') : '') + phone} />
               {!isVpn && <SummaryRow k={t('pay.network')} v={carrier} />}
               <SummaryRow k={t('pay.pack')} v={pack ? pack.n : '—'} />
-              <SummaryRow k={t('pay.total')} v={pack ? fmt(pack.p) : '—'} bold />
+              {/* The quote is what the provider will actually take. Falling back
+                  to the XOF list price only while it loads. */}
+              <SummaryRow
+                k={t('pay.total')}
+                v={quote ? formatMoney(quote.amount, quote.currency) : pack ? fmt(pack.p) : '—'}
+                bold
+              />
+              {quote && quote.currency !== 'XOF' && (
+                <SummaryRow k={t('pay.converted')} v={fmt(quote.amountXof)} />
+              )}
             </View>
 
             {isVpn && (
@@ -528,7 +746,7 @@ function TopUp() {
                     : { id: m.id, name: m.title, sub: t('pay.cardSub') },
                 )
                 .map((m) => (
-                <Pressable key={m.id} onPress={() => { setPay(m.id); setUssdStep(false); }} style={[st.payOpt, method?.id === m.id && { borderColor: C.accent, backgroundColor: C.accent100 }]}>
+                <Pressable key={m.id} onPress={() => setPay(m.id)} style={[st.payOpt, method?.id === m.id && { borderColor: C.accent, backgroundColor: C.accent100 }]}>
                   <View style={[st.radioDot, method?.id === m.id && { backgroundColor: C.accent, borderColor: C.accent }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={st.rowTitle}>{m.name}</Text>
@@ -541,26 +759,44 @@ function TopUp() {
               )}
             </View>
             <Text style={st.subText}>{t('pay.earn', { count: earnPts })}</Text>
-            {isMomo && ussdStep ? (
-              <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 12 }}>
+
+            {/* PawaPay pushes an approval prompt to the handset — there is no
+                USSD string to dial, so this waits on the customer rather than
+                asking them to type anything. */}
+            {order?.action === 'approve_on_handset' && paying && (
+              <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 8 }}>
                 <Kicker>{t('pay.authorize', { provider: method?.title ?? momoName })}</Kicker>
-                <Text style={st.subText}>{t('pay.dialNote')}</Text>
-                <View style={[st.rowBetween, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.divider, padding: 12 }]}>
-                  <Text style={{ fontFamily: F.heading, fontSize: 22, color: C.text }}>{ussdFor(carrier, pack.p)}</Text>
-                  <Btn variant="ghost" label={copied ? t('common.copied') : t('common.copy')} onPress={async () => { await Clipboard.setStringAsync(ussdFor(carrier, pack.p)); setCopied(true); setTimeout(() => setCopied(false), 2000); }} />
-                </View>
-                <Btn label={paying ? t('pay.waiting') : t('pay.dialCta')} disabled={paying} onPress={() => { Linking.openURL('tel:' + encodeURIComponent(ussdFor(carrier, pack.p))).catch(() => {}); finishPay(); }} />
+                <Text style={st.subText}>{t('pay.approveOnHandset', { phone })}</Text>
                 <Text style={st.subText}>{t('pay.waitingNote', { provider: method?.title ?? momoName })}</Text>
               </View>
-            ) : (
-              <Btn
-                label={paying
-                  ? t('pay.processing')
-                  : t(isMomo ? 'pay.confirm' : 'pay.payNow', { amount: pack ? fmt(pack.p) : '' })}
-                disabled={paying || (isVpn && !emailOk)}
-                onPress={doPay}
-              />
             )}
+
+            {/* A custom airtime amount is not a catalogue line, and POST /checkout
+                only takes a product id — there is no variable-amount path on the
+                API yet, so this says so instead of failing at the last step. */}
+            {!pack?.id && (
+              <View style={{ borderWidth: 2, borderColor: C.accent, padding: 12 }}>
+                <Text style={{ color: C.accent700, fontFamily: F.semi, fontSize: 13 }}>
+                  {t('pay.customUnavailable')}
+                </Text>
+              </View>
+            )}
+
+            {payError && (
+              <View style={{ borderWidth: 2, borderColor: C.accent, padding: 12 }}>
+                <Text style={{ color: C.accent700, fontFamily: F.semi, fontSize: 13 }}>
+                  {t(`pay.error.${payError}`, t('pay.errorGeneric'))}
+                </Text>
+              </View>
+            )}
+
+            <Btn
+              label={paying
+                ? t('pay.processing')
+                : t(isMomo ? 'pay.confirm' : 'pay.payNow', { amount: quote ? formatMoney(quote.amount, quote.currency) : pack ? fmt(pack.p) : '' })}
+              disabled={paying || !pack?.id || !payment.supported || (isVpn && !emailOk)}
+              onPress={doPay}
+            />
           </View>
         </ScrollView>
       )}
@@ -641,11 +877,26 @@ function TopUp() {
             <Text style={[st.subText, { marginBottom: 14 }]}>{t('esim.destinationSub')}</Text>
             <TextInput style={[st.input, { marginBottom: 14 }]} value={countrySearch} onChangeText={setCountrySearch} placeholder={t('esim.searchPlaceholder')} />
             <View style={{ borderTopWidth: 2, borderColor: C.divider }}>
-              {esimCountries(t).filter((c) => c.name.toLowerCase().includes(countrySearch.trim().toLowerCase())).map((c) => (
-                <Pressable key={c.code} onPress={() => { setEsimCountry(c.name); setScreen('esimPlans'); }} style={({ pressed }) => [st.packRow, pressed && { backgroundColor: C.accent100 }]}>
+              {(cat?.esimDestinations ?? []).filter((c) => c.name.toLowerCase().includes(countrySearch.trim().toLowerCase())).map((c) => (
+                <Pressable
+                  key={c.code}
+                  onPress={async () => {
+                    setEsimCountry(c.name);
+                    setEsimPlanList([]);
+                    setScreen('esimPlans');
+                    // Plans are per-destination, so they are fetched on demand
+                    // rather than shipped inside the catalogue payload.
+                    const res = await fetchEsimPlans(c.name, i18n.language?.slice(0, 2) || 'en').catch(() => null);
+                    if (res) setEsimPlanList(res.plans.map(toPack));
+                  }}
+                  style={({ pressed }) => [st.packRow, pressed && { backgroundColor: C.accent100 }]}
+                >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
                     <View style={{ width: 30, height: 30, borderWidth: 1.5, borderColor: C.text, alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontFamily: F.heading, fontSize: 11, color: C.text }}>{c.code}</Text>
+                      {/* Regions like "Global" have no flag, so the code stands in. */}
+                      {flagFor(c.code)
+                        ? <Text style={{ fontSize: 17, lineHeight: 22 }}>{flagFor(c.code)}</Text>
+                        : <Text style={{ fontFamily: F.heading, fontSize: 11, color: C.text }}>{c.code}</Text>}
                     </View>
                     <View>
                       <Text style={st.rowTitle}>{c.name}</Text>
@@ -670,7 +921,7 @@ function TopUp() {
             </View>
             <Text style={[st.subText, { marginBottom: 16 }]}>{t('esim.plansSub')}</Text>
             <PackGrid
-              items={esimPlansFor(esimCountry, t)}
+              items={esimPlanList}
               onSelect={(p) => { setService('esim'); setCarrier(p.carrier); openPack(p); }}
             />
           </View>

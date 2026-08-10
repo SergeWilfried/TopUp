@@ -7,6 +7,11 @@ export type Env = {
   RESEND_API_KEY?: string;
   /** Master key the per-server agent tokens are derived from. Never stored in D1. */
   AGENT_SIGNING_KEY?: string;
+  // LAfricaMobile authenticates with login+password as *query parameters*, so
+  // these end up in the request URL. Nothing here may log a built URL.
+  LAFRICAMOBILE_LOGIN?: string;
+  LAFRICAMOBILE_PASSWORD?: string;
+  LAFRICAMOBILE_BASE_URL?: string;
 
   // Checkout providers.
   PUBLIC_BASE_URL?: string;

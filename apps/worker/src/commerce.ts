@@ -1,5 +1,18 @@
 import { ParamError } from './query';
 import { now, type Env } from './env';
+import { REVENUE_STATUSES, sqlIn } from './delivery/types';
+
+/**
+ * Revenue is money captured and not given back, not parcels shipped.
+ *
+ * These aggregates all used `status = 'delivered'` as a stand-in for "we were
+ * paid", which was true only while payment and delivery were the same event.
+ * Now that they are not, an order paid at 23:58 and delivered at 00:02 would
+ * have dropped out of the day it was actually paid for.
+ *
+ * Interpolated from a closed list of literals — never user input.
+ */
+const REVENUE_SQL = `(${sqlIn(REVENUE_STATUSES)})`;
 
 /**
  * Orders, payments and customers, read straight from D1.
@@ -114,7 +127,7 @@ export async function listOrders(env: Env, params: URLSearchParams) {
   const totals = await env.DB.prepare(
     `SELECT COUNT(*) AS total,
             COALESCE(SUM(o.amount), 0) AS value,
-            COALESCE(SUM(CASE WHEN o.status = 'delivered' THEN o.amount ELSE 0 END), 0) AS settled
+            COALESCE(SUM(CASE WHEN o.status IN ${REVENUE_SQL} THEN o.amount ELSE 0 END), 0) AS settled
      ${BASE_FROM} ${clause}`,
   )
     .bind(...binds)
@@ -193,9 +206,23 @@ export async function getOrder(env: Env, id: string) {
       done: Boolean(captured),
     },
     {
-      step: order.status === 'refunded' ? 'Refunded' : order.status === 'failed' ? 'Failed' : 'Delivered',
+      // The last step is no longer "Delivered unless something went wrong":
+      // an order can be paid for and still be in flight, or in the state where
+      // we honestly do not know, and the console has to say which.
+      step:
+        order.status === 'refunded'
+          ? 'Refunded'
+          : order.status === 'failed'
+            ? 'Payment failed'
+            : order.status === 'delivery_failed'
+              ? 'Delivery failed — refund due'
+              : order.status === 'delivery_unknown'
+                ? 'Unconfirmed — needs checking'
+                : order.status === 'delivered'
+                  ? 'Delivered'
+                  : 'Delivering',
       at: order.deliveredAt ?? order.createdAt,
-      done: order.status !== 'pending',
+      done: ['delivered', 'refunded', 'failed', 'delivery_failed'].includes(order.status),
     },
   ];
 
@@ -221,7 +248,7 @@ export type CustomerRow = {
 const CUSTOMER_SELECT = `
   SELECT c.id, c.name, c.msisdn AS phone, c.carrier, c.created_at AS joinedAt, c.points,
          COUNT(o.id) AS orders,
-         COALESCE(SUM(CASE WHEN o.status = 'delivered' THEN o.amount ELSE 0 END), 0) AS spend
+         COALESCE(SUM(CASE WHEN o.status IN ${REVENUE_SQL} THEN o.amount ELSE 0 END), 0) AS spend
   FROM customers c
   LEFT JOIN orders o ON o.customer_id = c.id`;
 
@@ -249,8 +276,8 @@ export async function customerDetail(env: Env, id: string) {
 
   const totals = await env.DB.prepare(
     `SELECT COUNT(*) AS count,
-            COALESCE(SUM(CASE WHEN status = 'delivered' THEN amount ELSE 0 END), 0) AS settled,
-            SUM(CASE WHEN status IN ('failed','refunded') THEN 1 ELSE 0 END) AS failed,
+            COALESCE(SUM(CASE WHEN status IN ${REVENUE_SQL} THEN amount ELSE 0 END), 0) AS settled,
+            SUM(CASE WHEN status IN ('failed','refunded','delivery_failed') THEN 1 ELSE 0 END) AS failed,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
             MAX(created_at) AS lastOrderAt
      FROM orders WHERE customer_id = ?`,
@@ -260,7 +287,7 @@ export async function customerDetail(env: Env, id: string) {
 
   const { results: breakdown } = await env.DB.prepare(
     `SELECT product, COUNT(*) AS count,
-            COALESCE(SUM(CASE WHEN status = 'delivered' THEN amount ELSE 0 END), 0) AS total
+            COALESCE(SUM(CASE WHEN status IN ${REVENUE_SQL} THEN amount ELSE 0 END), 0) AS total
      FROM orders WHERE customer_id = ? GROUP BY product ORDER BY total DESC`,
   )
     .bind(id)
@@ -268,7 +295,7 @@ export async function customerDetail(env: Env, id: string) {
 
   const settled = totals?.settled ?? 0;
   const delivered = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM orders WHERE customer_id = ? AND status = 'delivered'`,
+    `SELECT COUNT(*) AS n FROM orders WHERE customer_id = ? AND status IN ${REVENUE_SQL}`,
   )
     .bind(id)
     .first<{ n: number }>();
@@ -297,7 +324,7 @@ export async function commerceStats(env: Env) {
     (
       await env.DB.prepare(
         `SELECT COALESCE(SUM(amount), 0) AS v FROM orders
-         WHERE status = 'delivered' AND created_at >= ? AND created_at < ?`,
+         WHERE status IN ${REVENUE_SQL} AND created_at >= ? AND created_at < ?`,
       )
         .bind(from, to)
         .first<{ v: number }>()
@@ -305,11 +332,11 @@ export async function commerceStats(env: Env) {
 
   const totals = await env.DB.prepare(
     `SELECT COUNT(*) AS orders,
-            COALESCE(SUM(CASE WHEN status = 'delivered' THEN amount ELSE 0 END), 0) AS revenue,
+            COALESCE(SUM(CASE WHEN status IN ${REVENUE_SQL} THEN amount ELSE 0 END), 0) AS revenue,
             SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
             SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) AS refunded,
-            SUM(CASE WHEN status IN ('failed','refunded') THEN 1 ELSE 0 END) AS unhappy
+            SUM(CASE WHEN status IN ('failed','refunded','delivery_failed') THEN 1 ELSE 0 END) AS unhappy
      FROM orders`,
   ).first<{
     orders: number;
@@ -325,7 +352,7 @@ export async function commerceStats(env: Env) {
 
   const { results: byProduct } = await env.DB.prepare(
     `SELECT product,
-            COALESCE(SUM(CASE WHEN status = 'delivered' THEN amount ELSE 0 END), 0) AS total,
+            COALESCE(SUM(CASE WHEN status IN ${REVENUE_SQL} THEN amount ELSE 0 END), 0) AS total,
             COUNT(*) AS count
      FROM orders GROUP BY product`,
   ).all<{ product: string; total: number; count: number }>();
@@ -345,7 +372,7 @@ export async function commerceStats(env: Env) {
     `SELECT CAST((created_at - ?) / ? AS INTEGER) AS bucket,
             COALESCE(SUM(amount), 0) AS total
      FROM orders
-     WHERE status = 'delivered' AND created_at >= ?
+     WHERE status IN ${REVENUE_SQL} AND created_at >= ?
      GROUP BY bucket`,
   )
     .bind(t - 13 * DAY, DAY, t - 13 * DAY)

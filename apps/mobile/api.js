@@ -73,6 +73,68 @@ export async function signOut() {
 
 export const me = () => request('GET', '/me');
 
+/** Purchases and loyalty balance for the signed-in account. */
+export const myOrders = (lang) => request('GET', `/me/orders?lang=${encodeURIComponent(lang || 'en')}`);
+
+// ── catalogue ───────────────────────────────────────────────────────────────
+/**
+ * The sellable catalogue, already translated server-side.
+ *
+ * Prices and terms have to come from here rather than a bundled copy: the
+ * console can change or disable a product at any time, and checkout re-reads
+ * the price from the database anyway, so a stale local list would quote one
+ * number and charge another.
+ */
+export const catalogue = (lang) => request('GET', `/catalogue?lang=${encodeURIComponent(lang)}`);
+
+export const esimPlans = (country, lang) =>
+  request('GET', `/esim/plans/${encodeURIComponent(country)}?lang=${encodeURIComponent(lang)}`);
+
+/** VPN locations that are actually installable — active servers only. */
+export const vpnServers = () => request('GET', '/servers');
+
+// ── purchase ────────────────────────────────────────────────────────────────
 /** Payment options and the converted price for this market. */
 export const paymentMethods = (country, productId) =>
-  request('GET', `/checkout/methods?country=${encodeURIComponent(country)}${productId ? `&productId=${encodeURIComponent(productId)}` : ''}`);
+  request(
+    'GET',
+    `/checkout/methods?country=${encodeURIComponent(country)}` +
+      (productId ? `&productId=${encodeURIComponent(productId)}` : ''),
+  );
+
+/**
+ * Starts a purchase. The rail is decided by the server from `country`, so the
+ * app cannot ask to be charged on one the backend would reject.
+ *
+ * Resolves to `{ orderId, status, action, url?, quote }` — `action` is
+ * 'approve_on_handset' for mobile money or 'redirect' for card rails.
+ */
+export const startCheckout = ({ productId, country, msisdn, recipientMsisdn, recipientCountry, email }) =>
+  request('POST', '/checkout', { productId, country, msisdn, recipientMsisdn, recipientCountry, email });
+
+/** Authoritative order state. The app polls this rather than trusting a callback. */
+export const orderStatus = (orderId) => request('GET', `/checkout/${encodeURIComponent(orderId)}`);
+
+/**
+ * Polls until the order leaves `pending`, or the caller gives up.
+ *
+ * Mobile money resolves when the customer approves on their handset, which can
+ * take a while, so this is deliberately patient and cancellable.
+ */
+export async function waitForOrder(orderId, { intervalMs = 2500, timeoutMs = 180000, signal } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (signal?.aborted) throw new ApiError(0, 'cancelled');
+    const order = await orderStatus(orderId);
+    if (order.status && order.status !== 'pending') return order;
+    if (Date.now() >= deadline) throw new ApiError(0, 'timeout');
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
+// ── vpn ─────────────────────────────────────────────────────────────────────
+/** Issues a WireGuard peer on one server. The config is returned once. */
+export const provisionPeer = (serverId) => request('POST', '/me/provision', { serverId });
+
+export const removePeer = (publicKey) =>
+  request('DELETE', `/me/peers/${encodeURIComponent(publicKey)}`);

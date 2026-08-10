@@ -6,6 +6,7 @@ import admin from './admin';
 import checkout from './checkout/routes';
 import vpn from './vpn/routes';
 import { sweep } from './vpn/sweep';
+import { reconcileDeliveries } from './delivery';
 import type { Env } from './env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -35,11 +36,12 @@ app.route('/checkout', checkout);
 // Customer-facing VPN control plane — auth, subscription, peers. D1-backed.
 app.route('/', vpn);
 
-// Locations come from the `servers` table, which also holds the agent URL and
-// per-server token. Those two columns are never exposed here.
+// Locations come from the `servers` table, which also holds the agent URL.
+// That column is never exposed here. `host` is: it is the tunnel endpoint,
+// written into every config the customer installs, so it is not a secret.
 app.get('/servers', async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT id, name FROM servers WHERE active = 1 ORDER BY name`,
+    `SELECT id AS code, name, host FROM servers WHERE active = 1 ORDER BY name`,
   ).all();
   return c.json({ servers: results });
 });
@@ -49,8 +51,20 @@ app.notFound((c) => c.json({ error: 'not_found' }, 404));
 export default {
   fetch: app.fetch,
 
-  /** Expiry sweep and reconciliation of peers the agent and D1 disagree about. */
+  /**
+   * Expiry sweep, peer reconciliation, and delivery reconciliation.
+   *
+   * The delivery pass only ever *asks* a provider what happened — it never
+   * re-sends. An ambiguous top-up that is retried is one the customer may
+   * receive twice and we pay for twice, so anything still unresolved stays put
+   * for a human rather than being guessed at on a schedule.
+   */
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(sweep(env).catch((e) => console.error(`sweep failed: ${(e as Error).message}`)));
+    ctx.waitUntil(
+      reconcileDeliveries(env).catch((e) =>
+        console.error(`delivery reconciliation failed: ${(e as Error).message}`),
+      ),
+    );
   },
 };

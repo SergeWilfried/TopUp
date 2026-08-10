@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
-import { C, F, fmtN } from '@topup/core';
+import { C, F, fmt, fmtN } from '@topup/core';
 import { useTranslation } from 'react-i18next';
 import { Brand, Kicker, Tag, st } from '../ui';
 
-export default function HomeScreen({ points, history, onBuy, onDailyDeal, onVpn, hasVpn }) {
+export default function HomeScreen({ points, history, deal, onBuy, onDailyDeal, onVpn, hasVpn }) {
   const { t } = useTranslation();
   const TILES = [
     { k: '₣', l: t('home.airtime'), svc: 'airtime' },
@@ -41,21 +41,29 @@ export default function HomeScreen({ points, history, onBuy, onDailyDeal, onVpn,
         </View>
       </View>
 
-      <Pressable
-        onPress={onDailyDeal}
-        style={({ pressed }) => [
-          { marginHorizontal: 20, marginBottom: 20, backgroundColor: pressed ? C.accent600 : C.accent, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
-        ]}
-      >
-        <View style={{ flex: 1 }}>
-          <Kicker light>{t('home.dealKicker')}</Kicker>
-          <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 18 }}>{t('home.dealTitle')}</Text>
-          <Text style={{ color: 'rgba(243,242,242,0.85)', fontSize: 12, fontFamily: F.body }}>
-            <Text style={{ textDecorationLine: 'line-through' }}>{t('home.dealWas')}</Text>{t('home.dealTerms')}
-          </Text>
-        </View>
-        <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 20 }}>→</Text>
-      </Pressable>
+      {/* Drawn from the catalogue line it actually buys. The copy used to be a
+          fixed "2 Go pour 800 FCFA" while the button charged whichever pack
+          carried a bonus — advertising one price and taking another. There is
+          no former price in the catalogue, so none is shown. */}
+      {deal && (
+        <Pressable
+          onPress={onDailyDeal}
+          style={({ pressed }) => [
+            { marginHorizontal: 20, marginBottom: 20, backgroundColor: pressed ? C.accent600 : C.accent, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Kicker light>{t('home.dealKicker')}</Kicker>
+            <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 18 }}>
+              {t('home.dealTitle', { name: deal.n, price: fmt(deal.p) })}
+            </Text>
+            <Text style={{ color: 'rgba(243,242,242,0.85)', fontSize: 12, fontFamily: F.body }}>
+              {[deal.v, deal.b].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+          <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 20 }}>→</Text>
+        </Pressable>
+      )}
 
       <Pressable
         onPress={onVpn}

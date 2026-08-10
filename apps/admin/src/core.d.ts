@@ -16,6 +16,8 @@ declare module '@topup/core' {
   export const vpnPlans: (t: Translate) => Pack[];
   export const esimCountries: (t: Translate) => EsimCountry[];
   export const esimPlansFor: (name: string, t: Translate) => Pack[];
+  /** Flag emoji for a two-letter code, or null when one cannot be formed. */
+  export const flagFor: (code: string | null | undefined) => string | null;
 }
 
 declare module '@topup/core/locales/en' {

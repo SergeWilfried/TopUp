@@ -68,6 +68,44 @@ export const MOBILE_MONEY_CARRIERS = {
 };
 
 /**
+ * Whether this country can be charged on that wallet.
+ *
+ * The carrier is chosen by the customer and checked against this list rather
+ * than inferred from the number's prefix. Prefix tables differ per country and
+ * are re-issued as ranges are allocated; guessing wrong would hand the payment
+ * to the wrong provider, which fails far less visibly than asking does.
+ */
+export const carrierAllowed = (country, carrier) =>
+  (MOBILE_MONEY_CARRIERS[String(country ?? '').toUpperCase()] ?? []).includes(carrier);
+
+/**
+ * International dialling codes, needed to put an MSISDN in the form providers
+ * expect. Customers type national numbers, so the country doing the paying —
+ * not the one being travelled to — decides the prefix.
+ */
+export const DIALLING_CODES = {
+  CI: '225', SN: '221', BF: '226', BJ: '229', ML: '223',
+  NE: '227', TG: '228', GW: '245',
+  NG: '234', KE: '254', RW: '250', ZA: '27',
+  US: '1', CA: '1', GB: '44', CN: '86', TR: '90',
+};
+
+export const diallingCodeFor = (country) => DIALLING_CODES[String(country ?? '').toUpperCase()] ?? null;
+
+/**
+ * ISO 3166-1 alpha-3, which is what PawaPay speaks. We key everything on
+ * alpha-2, so a translation is needed to check that the country a provider was
+ * predicted for is the country we are charging.
+ */
+export const ISO3 = {
+  CI: 'CIV', SN: 'SEN', BF: 'BFA', BJ: 'BEN', ML: 'MLI',
+  NE: 'NER', TG: 'TGO', GW: 'GNB',
+  NG: 'NGA', KE: 'KEN', RW: 'RWA', ZA: 'ZAF',
+};
+
+export const iso3For = (country) => ISO3[String(country ?? '').toUpperCase()] ?? null;
+
+/**
  * Converts a XOF price into the customer's currency.
  *
  * `rates` maps a currency to how many units one XOF buys. XOF→EUR is a fixed
@@ -90,3 +128,34 @@ export const toMinorUnits = (amount, currency) =>
   Math.round(amount * 10 ** (CURRENCY_DECIMALS[currency] ?? 2));
 
 export const EUR_PEG = 655.957;
+
+/**
+ * Flag for a two-letter location code.
+ *
+ * Codes are turned into regional-indicator pairs, which every platform renders
+ * as that country's flag. Every destination and every VPN endpoint is a single
+ * country, so a plain ISO mapping is correct — no pseudo-codes to special-case.
+ * Callers fall back to showing the code when this returns null.
+ */
+const INDICATOR_A = 0x1f1e6;
+
+export const flagFor = (code) => {
+  const c = String(code ?? '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return null;
+  return String.fromCodePoint(
+    INDICATOR_A + (c.charCodeAt(0) - 65),
+    INDICATOR_A + (c.charCodeAt(1) - 65),
+  );
+};
+
+/**
+ * Countries offerable in a phone-number country picker.
+ *
+ * Only markets that have both a dialling code and a rail: showing a code we
+ * cannot charge would let a customer choose their way into a dead end at the
+ * payment step. Names are translation keys so the list reads in either
+ * language — the dialling code and flag carry the meaning regardless.
+ */
+export const PAYABLE_COUNTRIES = Object.keys(DIALLING_CODES)
+  .filter((code) => routeForCountry(code))
+  .map((code) => ({ code, dial: DIALLING_CODES[code], nameKey: `country.${code}` }));

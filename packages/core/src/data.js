@@ -41,44 +41,84 @@ export const airtimePacks = (t) =>
 
 // Destinations as keys. `name` is the stable identity used for lookups and is
 // never translated; only the coverage line is prose.
+/**
+ * The corridors we sell into.
+ *
+ * Every destination is a single country. There is no "West Africa" or "Global"
+ * line, because an eSIM is provisioned on a named operator's network and no
+ * such operator exists at regional scale — each country has its own set, listed
+ * below. A regional tile would have had to claim a network it cannot name.
+ */
 export const ESIM_DESTINATIONS = [
   { name: 'Côte d’Ivoire', code: 'CI', coverageKey: 'esim.home', kind: 'home' },
-  { name: 'Ghana', code: 'GH', coverageKey: 'esim.travel', kind: 'travel' },
-  { name: 'Nigeria', code: 'NG', coverageKey: 'esim.travel', kind: 'travel' },
   { name: 'Senegal', code: 'SN', coverageKey: 'esim.travel', kind: 'travel' },
-  { name: 'France', code: 'FR', coverageKey: 'esim.travel', kind: 'travel' },
-  { name: 'United States', code: 'US', coverageKey: 'esim.travel', kind: 'travel' },
-  { name: 'West Africa', code: 'WA', coverageKey: 'esim.regional', kind: 'region' },
-  { name: 'Global', code: 'GL', coverageKey: 'esim.global120', kind: 'region' },
+  { name: 'Burkina Faso', code: 'BF', coverageKey: 'esim.travel', kind: 'travel' },
+  { name: 'Kenya', code: 'KE', coverageKey: 'esim.travel', kind: 'travel' },
+  { name: 'Rwanda', code: 'RW', coverageKey: 'esim.travel', kind: 'travel' },
+  { name: 'China', code: 'CN', coverageKey: 'esim.travel', kind: 'travel' },
+  { name: 'Turkey', code: 'TR', coverageKey: 'esim.travel', kind: 'travel' },
 ];
+
+/**
+ * Operators per corridor. One eSIM plan is one operator's network, so this is
+ * what a destination can actually be sold on — not a generic "Travel" label.
+ */
+export const DESTINATION_NETWORKS = {
+  CI: ['Orange', 'MTN', 'Moov'],
+  SN: ['Orange', 'Free', 'Expresso'],
+  BF: ['Orange', 'Moov', 'Telecel'],
+  KE: ['Safaricom', 'Airtel'],
+  RW: ['MTN', 'Airtel'],
+  CN: ['China Mobile', 'China Unicom'],
+  TR: ['Turkcell', 'Vodafone'],
+};
+
+export const networksFor = (code) => DESTINATION_NETWORKS[String(code ?? '').toUpperCase()] ?? [];
 
 export const esimCountries = (t) =>
   ESIM_DESTINATIONS.map((d) => ({ name: d.name, code: d.code, sub: t(d.coverageKey), type: d.kind }));
 
+/**
+ * Plan tiers, one set for the home market and one for the corridors.
+ *
+ * Kept here so the seeded catalogue and this local fallback cannot drift: they
+ * both expand the same tiers across whatever operators the destination has.
+ */
+const ESIM_TIERS = {
+  home: [
+    { size: '5 GB', termsKey: 'esim.localValid30', price: 3000 },
+    { size: '10 GB', termsKey: 'esim.localValid30', price: 5000, bonus: '+1 GB' },
+  ],
+  travel: [
+    { size: '1 GB', termsKey: 'esim.travelValid', termsParams: { days: 7 }, price: 3500 },
+    { size: '3 GB', termsKey: 'esim.travelValid', termsParams: { days: 15 }, price: 7500, bonusKey: 'esim.popular' },
+    { size: '10 GB', termsKey: 'esim.travelValid', termsParams: { days: 30 }, price: 16000 },
+  ],
+};
+
+/** One row per operator per tier — an eSIM is always sold on a named network. */
+export const esimPlanSeed = (dest) =>
+  networksFor(dest.code).flatMap((network) =>
+    ESIM_TIERS[dest.kind === 'home' ? 'home' : 'travel'].map((tier) => ({
+      name: `${network} · ${tier.size}`,
+      network,
+      termsKey: tier.termsKey,
+      termsParams: tier.termsParams ?? null,
+      bonus: tier.bonus ?? null,
+      bonusKey: tier.bonusKey ?? null,
+      price: tier.price,
+    })),
+  );
+
 export const esimPlansFor = (name, t) => {
-  const list = esimCountries(t);
-  const c = list.find((x) => x.name === name) || list[0];
-  if (c.type === 'home')
-    return [
-      { n: 'Orange eSIM · 5 GB', v: t('esim.localValid30'), p: 3000, carrier: 'Orange' },
-      { n: 'MTN eSIM · 10 GB', v: t('esim.localValid30'), p: 5000, carrier: 'MTN', b: '+1 GB' },
-      { n: 'Moov eSIM · 3 GB', v: t('esim.localValid30'), p: 2000, carrier: 'Moov' },
-    ];
-  if (c.name === 'West Africa')
-    return [
-      { n: 'West Africa · 5 GB', v: t('esim.regionalValid', { days: 15 }), p: 6500, carrier: 'Travel' },
-      { n: 'West Africa · 10 GB', v: t('esim.regionalValid', { days: 30 }), p: 11000, carrier: 'Travel', b: t('esim.bestValue') },
-    ];
-  if (c.name === 'Global')
-    return [
-      { n: 'Global · 3 GB', v: t('esim.travelGlobal', { days: 15 }), p: 9000, carrier: 'Travel' },
-      { n: 'Global · 10 GB', v: t('esim.travelGlobal', { days: 30 }), p: 22000, carrier: 'Travel' },
-    ];
-  return [
-    { n: c.name + ' · 1 GB', v: t('esim.travelValid', { days: 7 }), p: 3500, carrier: 'Travel' },
-    { n: c.name + ' · 3 GB', v: t('esim.travelValid', { days: 15 }), p: 7500, carrier: 'Travel', b: t('esim.popular') },
-    { n: c.name + ' · 10 GB', v: t('esim.travelValid', { days: 30 }), p: 16000, carrier: 'Travel' },
-  ];
+  const dest = ESIM_DESTINATIONS.find((d) => d.name === name) ?? ESIM_DESTINATIONS[0];
+  return esimPlanSeed(dest).map((p) => ({
+    n: p.name,
+    v: t(p.termsKey, p.termsParams ?? undefined),
+    p: p.price,
+    b: p.bonusKey ? t(p.bonusKey) : p.bonus,
+    carrier: p.network,
+  }));
 };
 
 // ---------- VPN ----------

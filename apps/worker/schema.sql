@@ -113,9 +113,17 @@ CREATE TABLE IF NOT EXISTS orders (
   detail         TEXT NOT NULL,          -- what the customer saw
   amount         INTEGER NOT NULL,
   currency       TEXT NOT NULL DEFAULT 'XOF',
-  status         TEXT NOT NULL,          -- pending | delivered | failed | refunded
+  status         TEXT NOT NULL,          -- pending | paid | delivering | delivered
+                                         --   | delivery_failed | delivery_unknown | failed | refunded
   created_at     INTEGER NOT NULL,
   delivered_at   INTEGER,
+  recipient_msisdn TEXT,
+  recipient_country TEXT,
+  delivery_provider TEXT,
+  delivery_ref     TEXT,
+  delivery_error   TEXT,
+  delivery_attempts INTEGER NOT NULL DEFAULT 0,
+  delivery_checked_at INTEGER,
   failure_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS orders_customer ON orders(customer_id, created_at DESC);
@@ -138,6 +146,9 @@ CREATE TABLE IF NOT EXISTS payments (
   status       TEXT NOT NULL,            -- pending | captured | failed | refunded
   created_at   INTEGER NOT NULL,
   settled_at   INTEGER,
+  -- Last time the provider was asked about this payment, so reconciling on read
+  -- cannot turn client polling into one API call per poll.
+  checked_at   INTEGER,
   -- Provider callbacks retry; this makes replays a no-op rather than a
   -- duplicate capture.
   UNIQUE (provider, provider_ref)

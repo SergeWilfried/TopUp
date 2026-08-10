@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { isEmail, type Env } from '../env';
+import { translator } from '../i18n';
 import {
   currentUser,
   isActive,
@@ -129,6 +130,70 @@ vpn.get('/me', async (c) => {
     deviceLimit: Number(c.env.DEVICE_LIMIT ?? 3),
     peers,
   });
+});
+
+/**
+ * The signed-in customer's purchases and loyalty balance.
+ *
+ * Orders are keyed by MSISDN through `customers`, which the checkout writes in
+ * the same normalised form the auth layer stores — that link is the only thing
+ * connecting a phone sign-in to the purchases made from it. Card-rail orders
+ * are filed under `email:<address>`, so both keys are matched.
+ */
+vpn.get('/me/orders', async (c) => {
+  const user = c.get('user');
+  const keys = [user.msisdn, user.email && `email:${user.email}`].filter(Boolean) as string[];
+  if (!keys.length) return c.json({ points: 0, orders: [] });
+
+  const placeholders = keys.map(() => '?').join(', ');
+  const customer = await c.env.DB.prepare(
+    `SELECT id, points FROM customers WHERE msisdn IN (${placeholders})`,
+  )
+    .bind(...keys)
+    .first<{ id: string; points: number }>();
+  if (!customer) return c.json({ points: 0, orders: [] });
+
+  // `detail` is the English snapshot taken at purchase time, so a French
+  // customer's history read "5 GB · Valid 30 days" under French chrome. The
+  // product's translation key is resolved per request instead, with the
+  // snapshot as the fallback for rows whose product has since been deleted.
+  const { results } = await c.env.DB.prepare(
+    `SELECT o.id, o.product, o.sku, o.detail, o.amount, o.currency, o.status,
+            o.created_at AS createdAt, o.delivered_at AS deliveredAt,
+            o.failure_reason AS failureReason, o.recipient_msisdn AS recipientMsisdn,
+            p.name_key AS nameKey, p.name AS productName,
+            p.terms_key AS termsKey, p.terms AS terms, p.terms_params AS termsParams
+     FROM orders o
+     LEFT JOIN products p ON p.id = o.sku
+     WHERE o.customer_id = ? ORDER BY o.created_at DESC LIMIT 50`,
+  )
+    .bind(customer.id)
+    .all<{
+      detail: string;
+      nameKey: string | null;
+      productName: string | null;
+      termsKey: string | null;
+      terms: string | null;
+      termsParams: string | null;
+    }>();
+
+  const t = translator(c.req.query('lang') ?? 'en');
+  const orders = results.map(({ nameKey, productName, termsKey, terms, termsParams, ...row }) => {
+    const name = nameKey ? t(nameKey) : productName;
+    if (!name) return { ...row };
+    // "5 GB · Valid 30 days" rather than a bare "5 GB": the validity is what
+    // distinguishes two otherwise identical lines in a list of past purchases.
+    let params: Record<string, string | number> | undefined;
+    try {
+      params = termsParams ? JSON.parse(termsParams) : undefined;
+    } catch {
+      params = undefined;
+    }
+    const suffix = termsKey ? t(termsKey, params) : terms;
+    return { ...row, detail: suffix ? `${name} · ${suffix}` : name };
+  });
+
+  return c.json({ points: customer.points, orders });
 });
 
 vpn.post('/me/provision', async (c) => {
