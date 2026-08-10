@@ -1,0 +1,28 @@
+{
+  "name": "topup",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.24.0",
+  "scripts": {
+    "mobile": "pnpm --filter @topup/mobile start",
+    "mobile:ios": "pnpm --filter @topup/mobile ios",
+    "web": "pnpm --filter @topup/web dev",
+    "web:build": "pnpm --filter @topup/web build",
+    "admin:dev": "pnpm --filter @topup/admin dev",
+    "admin:build": "pnpm --filter @topup/admin build",
+    "worker:dev": "pnpm --filter @topup/worker dev",
+    "worker:deploy": "pnpm --filter @topup/worker deploy",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd",
+      "sharp"
+    ],
+    "overrides": {
+      "react": "19.1.0",
+      "react-dom": "19.1.0"
+    }
+  }
+}

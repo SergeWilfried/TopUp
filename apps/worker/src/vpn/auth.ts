@@ -1,0 +1,221 @@
+import { days, now, randHex, sha256, timingSafeEqual, type Env } from '../env';
+
+export type User = {
+  id: string;
+  email: string | null;
+  msisdn: string | null;
+  is_staff: number;
+  stripe_customer_id: string | null;
+  sub_expires_at: number | null;
+  created_at: number;
+};
+
+/** How a code was requested, and therefore which column identifies the user. */
+export type Channel = 'email' | 'sms';
+export const columnFor = (channel: Channel) => (channel === 'sms' ? 'msisdn' : 'email');
+
+export const isStaff = (user: User) => user.is_staff === 1;
+
+/** Digits only, so `07 09 55 12 34` and `+225 0709551234` are one identity. */
+export const normaliseMsisdn = (raw: string) => raw.replace(/\D/g, '').replace(/^0+/, '');
+
+const OTP_TTL = 10 * 60_000;
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_MAX_SENDS = 3;
+const OTP_SEND_WINDOW = 15 * 60_000;
+const SESSION_TTL = days(90);
+
+/** A subscription is live only while its expiry is in the future. */
+export const isActive = (user: User) => user.sub_expires_at !== null && user.sub_expires_at > now();
+
+export async function currentUser(req: Request, env: Env): Promise<User | null> {
+  const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+  // The column holds a hash, so a leaked database yields nothing replayable.
+  const row = await env.DB.prepare(
+    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.token_hash = ? AND s.expires_at > ?`,
+  )
+    .bind(await sha256(token), now())
+    .first<User>();
+  return row ?? null;
+}
+
+export type OtpResult = { ok: true } | { ok: false; error: string; status: number };
+
+/**
+ * Issues a challenge. Resends are throttled per address so the endpoint cannot
+ * be used to bomb an inbox or burn the email budget, and the code is stored
+ * hashed so the table is not a list of live credentials.
+ */
+export async function requestOtp(
+  env: Env,
+  identifier: string,
+  channel: Channel,
+): Promise<OtpResult & { code?: string }> {
+  const t = now();
+  const existing = await env.DB.prepare(
+    `SELECT send_count, window_started_at FROM otp_codes WHERE identifier = ?`,
+  )
+    .bind(identifier)
+    .first<{ send_count: number; window_started_at: number }>();
+
+  let sendCount = 1;
+  let windowStart = t;
+  if (existing && t - existing.window_started_at < OTP_SEND_WINDOW) {
+    if (existing.send_count >= OTP_MAX_SENDS) {
+      return { ok: false, error: 'too_many_requests', status: 429 };
+    }
+    sendCount = existing.send_count + 1;
+    windowStart = existing.window_started_at;
+  }
+
+  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
+  await env.DB.prepare(
+    `INSERT INTO otp_codes (identifier, channel, code_hash, expires_at, attempts, send_count, window_started_at)
+     VALUES (?, ?, ?, ?, 0, ?, ?)
+     ON CONFLICT(identifier) DO UPDATE SET
+       channel = excluded.channel,
+       code_hash = excluded.code_hash,
+       expires_at = excluded.expires_at,
+       attempts = 0,
+       send_count = excluded.send_count,
+       window_started_at = excluded.window_started_at`,
+  )
+    .bind(identifier, channel, await sha256(code), t + OTP_TTL, sendCount, windowStart)
+    .run();
+
+  return { ok: true, code };
+}
+
+export type VerifyResult =
+  | { ok: true; token: string; user: User }
+  | { ok: false; error: string; status: number };
+
+/**
+ * Consumes a challenge.
+ *
+ * Attempts are counted and the row is destroyed once exhausted: six digits is
+ * only 10^6, and the previous version allowed unlimited parallel guesses.
+ */
+export async function verifyOtp(
+  env: Env,
+  identifier: string,
+  code: string,
+  channel: Channel,
+): Promise<VerifyResult> {
+  const t = now();
+  const row = await env.DB.prepare(
+    `SELECT code_hash, expires_at, attempts FROM otp_codes WHERE identifier = ?`,
+  )
+    .bind(identifier)
+    .first<{ code_hash: string; expires_at: number; attempts: number }>();
+
+  if (!row) return { ok: false, error: 'invalid_code', status: 401 };
+
+  if (row.expires_at <= t || row.attempts >= OTP_MAX_ATTEMPTS) {
+    await env.DB.prepare(`DELETE FROM otp_codes WHERE identifier = ?`).bind(identifier).run();
+    return { ok: false, error: 'invalid_code', status: 401 };
+  }
+
+  if (!timingSafeEqual(row.code_hash, await sha256(code))) {
+    const attempts = row.attempts + 1;
+    if (attempts >= OTP_MAX_ATTEMPTS) {
+      await env.DB.prepare(`DELETE FROM otp_codes WHERE identifier = ?`).bind(identifier).run();
+    } else {
+      await env.DB.prepare(`UPDATE otp_codes SET attempts = ? WHERE identifier = ?`)
+        .bind(attempts, identifier)
+        .run();
+    }
+    return { ok: false, error: 'invalid_code', status: 401 };
+  }
+
+  await env.DB.prepare(`DELETE FROM otp_codes WHERE identifier = ?`).bind(identifier).run();
+
+  const column = columnFor(channel);
+  let user = await env.DB.prepare(`SELECT * FROM users WHERE ${column} = ?`)
+    .bind(identifier)
+    .first<User>();
+
+  if (!user) {
+    const id = crypto.randomUUID();
+    await env.DB.prepare(`INSERT INTO users (id, ${column}, created_at) VALUES (?, ?, ?)`)
+      .bind(id, identifier, t)
+      .run();
+    user = {
+      id,
+      email: channel === 'email' ? identifier : null,
+      msisdn: channel === 'sms' ? identifier : null,
+      is_staff: 0,
+      stripe_customer_id: null,
+      sub_expires_at: null,
+      created_at: t,
+    };
+  }
+
+  // Tie the telco profile to the account so orders placed from the handset and
+  // a VPN bought by email belong to one person.
+  if (channel === 'sms') {
+    await env.DB.prepare(`UPDATE customers SET vpn_user_id = ? WHERE msisdn = ? AND vpn_user_id IS NULL`)
+      .bind(user.id, identifier)
+      .run();
+  }
+
+  const token = randHex(32);
+  await env.DB.prepare(
+    `INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`,
+  )
+    .bind(await sha256(token), user.id, t + SESSION_TTL, t)
+    .run();
+
+  return { ok: true, token, user };
+}
+
+/** Revokes the presented session — the previous version had no way out. */
+export async function signOut(req: Request, env: Env) {
+  const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) return;
+  await env.DB.prepare(`DELETE FROM sessions WHERE token_hash = ?`).bind(await sha256(token)).run();
+}
+
+/** Delivery. Never log the code outside local development. */
+export async function sendOtp(env: Env, identifier: string, code: string, channel: Channel) {
+  if (channel === 'sms') return sendOtpSms(env, identifier, code);
+  return sendOtpEmail(env, identifier, code);
+}
+
+/**
+ * SMS delivery. Unimplemented: this needs an aggregator with West African
+ * coverage. Until then a phone login only works in development, where the code
+ * is logged.
+ */
+async function sendOtpSms(env: Env, msisdn: string, code: string) {
+  if (env.ENVIRONMENT !== 'production') {
+    console.log(`[dev] OTP for +${msisdn}: ${code}`);
+    return;
+  }
+  console.error('SMS OTP requested but no SMS provider is configured');
+}
+
+async function sendOtpEmail(env: Env, email: string, code: string) {
+  if (env.ENVIRONMENT !== 'production') {
+    console.log(`[dev] OTP for ${email}: ${code}`);
+    return;
+  }
+  
+  if (!env.RESEND_API_KEY) {
+    console.error('OTP requested but no email provider is configured');
+    return;
+  }
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      from: 'TOPUP <login@vpn.tofee.app>',
+      to: email,
+      subject: `${code} is your TOPUP code`,
+      text: `Your code is ${code}. It expires in 10 minutes.`,
+    }),
+    signal: AbortSignal.timeout(8000),
+  }).catch((e) => console.error(`OTP email failed: ${(e as Error).message}`));
+}

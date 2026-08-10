@@ -1,0 +1,2950 @@
+openapi: 3.0.0
+info:
+  title: pawaPay Merchant API V2
+  version: 1.0.0
+  description: Please find complete documentation from https://docs.pawapay.io/.
+servers:
+  - url: https://api.sandbox.pawapay.io
+paths:
+  /v2/deposits:
+    post:
+      summary: Initiate deposit
+      parameters:
+        - name: Content-Digest
+          in: header
+          schema:
+            type: string
+          example: quis minim
+        - name: Signature
+          in: header
+          schema:
+            type: string
+          example: culpa Excepteur
+        - name: Signature-Input
+          in: header
+          schema:
+            type: string
+          example: aute adipisicing qui esse
+        - name: Accept-Signature
+          in: header
+          schema:
+            type: string
+          example: eu exercitation
+        - name: Accept-Digest
+          in: header
+          schema:
+            type: string
+          example: exercitation ea in laboris
+      responses:
+        '200':
+          description: ACCEPTED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depositId:
+                    type: string
+                  status:
+                    type: string
+                  created:
+                    type: string
+                    format: date-time
+              example:
+                depositId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: ACCEPTED
+                created: '2020-10-19T11:17:01Z'
+        '400':
+          description: INVALID_INPUT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depositId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                depositId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: INVALID_INPUT
+                  failureMessage: >-
+                    We are unable to parse the body of the request. Please
+                    consult API documentation for valid request payload.
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depositId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                depositId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depositId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                depositId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depositId:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                depositId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - deposits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: string
+                  format: utc-millisec
+                currency:
+                  type: string
+                depositId:
+                  type: string
+                payer:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    accountDetails:
+                      type: object
+                      properties:
+                        provider:
+                          type: string
+                        phoneNumber:
+                          type: string
+                          format: utc-millisec
+                preAuthorisationCode:
+                  type: string
+                clientReferenceId:
+                  type: string
+                customerMessage:
+                  type: string
+                metadata:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      orderId:
+                        type: string
+            example:
+              amount: '15'
+              currency: ZMW
+              depositId: '{{generatedUUID}}'
+              payer:
+                type: MMO
+                accountDetails:
+                  provider: MTN_MOMO_ZMB
+                  phoneNumber: '260763456789'
+              preAuthorisationCode: 3c
+              clientReferenceId: INV-123456
+              customerMessage: Note of 4 to 22 chars
+              metadata:
+                - orderId: ORD-123456789
+                - customerId: customer@email.com
+                  isPII: true
+  /v2/deposits/{depositId}:
+    get:
+      summary: Check deposit status
+      responses:
+        '200':
+          description: COMPLETED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      depositId:
+                        type: string
+                      status:
+                        type: string
+                      amount:
+                        type: string
+                        format: utc-millisec
+                      currency:
+                        type: string
+                      country:
+                        type: string
+                      payer:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                          accountDetails:
+                            type: object
+                            properties:
+                              phoneNUmber:
+                                type: string
+                                format: utc-millisec
+                              provider:
+                                type: string
+                      customerMessage:
+                        type: string
+                      clientReferenceId:
+                        type: string
+                      created:
+                        type: string
+                        format: date-time
+                      providerTransactionId:
+                        type: string
+                        format: utc-millisec
+                      metadata:
+                        type: object
+                        properties:
+                          orderId:
+                            type: string
+                          customerId:
+                            type: string
+                            format: email
+              example:
+                status: FOUND
+                data:
+                  depositId: 8917c345-4791-4285-a416-62f24b6982db
+                  status: COMPLETED
+                  amount: '123.00'
+                  currency: ZMW
+                  country: ZMB
+                  payer:
+                    type: MMO
+                    accountDetails:
+                      phoneNUmber: '260763456789'
+                      provider: MTN_MOMO_ZMB
+                  customerMessage: To ACME company
+                  clientReferenceId: REF-987654321
+                  created: '2020-10-19T08:17:01Z'
+                  providerTransactionId: '12356789'
+                  metadata:
+                    orderId: ORD-123456789
+                    customerId: customer@email.com
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - deposits
+    parameters:
+      - name: depositId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the deposit that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastDepositId}}'
+  /v2/deposits/resend-callback/{depositId}:
+    post:
+      summary: Resend deposit callback
+      responses:
+        '200':
+          description: ACCEPTED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: ACCEPTED
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - deposits
+    parameters:
+      - name: depositId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the deposit that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastDepositId}}'
+  /v2/checkouts:
+    post:
+      summary: Initiate checkout
+      responses: {}
+      tags:
+        - checkouts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                checkoutId:
+                  type: string
+                returnUrl:
+                  type: string
+                  format: uri
+                returnMethod:
+                  type: string
+                defaultLanguage:
+                  type: string
+                reason:
+                  type: object
+                  properties:
+                    en:
+                      type: string
+                countries:
+                  type: array
+                  items:
+                    type: string
+                amounts:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      country:
+                        type: string
+                      currency:
+                        type: string
+                      amount:
+                        type: string
+                        format: utc-millisec
+                clientReferenceId:
+                  type: string
+                metadata:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      orderId:
+                        type: string
+            example:
+              checkoutId: '{{generatedUUID}}'
+              returnUrl: https://merchant.example.com/checkout-result
+              returnMethod: INSTANT
+              defaultLanguage: en
+              reason:
+                en: GOODS PURCHASE
+              countries:
+                - ZMB
+              amounts:
+                - country: ZMB
+                  currency: ZMW
+                  amount: '15'
+              clientReferenceId: INV-123456
+              metadata:
+                - orderId: ORD-123456789
+                - customerId: customer@email.com
+                  isPII: true
+  /v2/checkouts/{checkoutId}:
+    get:
+      summary: Check checkout status
+      responses: {}
+      tags:
+        - checkouts
+    parameters:
+      - name: checkoutId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the checkout that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastCheckoutId}}'
+  /v2/checkouts/{checkoutId}/expire:
+    post:
+      summary: Expire checkout
+      responses: {}
+      tags:
+        - checkouts
+    parameters:
+      - name: checkoutId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the checkout that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastCheckoutId}}'
+  /v2/checkouts/resend-callback/{checkoutId}:
+    post:
+      summary: Resend checkout callback
+      responses: {}
+      tags:
+        - checkouts
+    parameters:
+      - name: checkoutId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the checkout that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastCheckoutId}}'
+  /v2/payouts:
+    post:
+      summary: Initiate payout
+      parameters:
+        - name: Content-Digest
+          in: header
+          schema:
+            type: string
+          example: quis minim
+        - name: Signature
+          in: header
+          schema:
+            type: string
+          example: culpa Excepteur
+        - name: Signature-Input
+          in: header
+          schema:
+            type: string
+          example: aute adipisicing qui esse
+        - name: Accept-Signature
+          in: header
+          schema:
+            type: string
+          example: eu exercitation
+        - name: Accept-Digest
+          in: header
+          schema:
+            type: string
+          example: exercitation ea in laboris
+      responses:
+        '200':
+          description: ACCEPTED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  created:
+                    type: string
+                    format: date-time
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: ACCEPTED
+                created: '2020-10-19T11:17:01Z'
+        '400':
+          description: INVALID_INPUT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: INVALID_INPUT
+                  failureMessage: >-
+                    We are unable to parse the body of the request. Please
+                    consult API documentation for valid request payload.
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - payouts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: string
+                  format: utc-millisec
+                currency:
+                  type: string
+                payoutId:
+                  type: string
+                recipient:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    accountDetails:
+                      type: object
+                      properties:
+                        provider:
+                          type: string
+                        phoneNumber:
+                          type: string
+                          format: utc-millisec
+                customerMessage:
+                  type: string
+                metadata:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      orderId:
+                        type: string
+            example:
+              amount: '15'
+              currency: ZMW
+              payoutId: '{{generatedUUID}}'
+              recipient:
+                type: MMO
+                accountDetails:
+                  provider: MTN_MOMO_ZMB
+                  phoneNumber: '260763456789'
+              customerMessage: Note of 4 to 22 chars
+              metadata:
+                - orderId: ORD-123456789
+                - customerId: customer@email.com
+                  isPII: true
+  /v2/payouts/bulk:
+    post:
+      summary: Initiate bulk payouts
+      parameters:
+        - name: Content-Digest
+          in: header
+          schema:
+            type: string
+          example: quis minim
+        - name: Signature
+          in: header
+          schema:
+            type: string
+          example: culpa Excepteur
+        - name: Signature-Input
+          in: header
+          schema:
+            type: string
+          example: aute adipisicing qui esse
+        - name: Accept-Signature
+          in: header
+          schema:
+            type: string
+          example: eu exercitation
+        - name: Accept-Digest
+          in: header
+          schema:
+            type: string
+          example: exercitation ea in laboris
+      responses:
+        '200':
+          description: Request has been processed by pawaPay
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    payoutId:
+                      type: string
+                    status:
+                      type: string
+                    created:
+                      type: string
+                      format: date-time
+              example:
+                - payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                  status: ACCEPTED
+                  created: '2020-10-19T11:17:01Z'
+                - payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                  status: DUPLICATE_IGNORED
+                  created: '2020-10-19T10:22:49Z'
+                - payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                  status: REJECTED
+                  failureReason:
+                    failureCode: AMOUNT_TOO_LARGE
+                    failureMessage: Amount should not be greater than 1000
+        '400':
+          description: INVALID_INPUT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: INVALID_INPUT
+                  failureMessage: >-
+                    We are unable to parse the body of the request. Please
+                    consult API documentation for valid request payload.
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - payouts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  amount:
+                    type: string
+                    format: utc-millisec
+                  currency:
+                    type: string
+                  payoutId:
+                    type: string
+                  recipient:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      accountDetails:
+                        type: object
+                        properties:
+                          provider:
+                            type: string
+                          phoneNumber:
+                            type: string
+                            format: utc-millisec
+                  customerMessage:
+                    type: string
+                  metadata:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        orderId:
+                          type: string
+            example:
+              - amount: '15'
+                currency: ZMW
+                payoutId: '{{generatedUUID}}'
+                recipient:
+                  type: MMO
+                  accountDetails:
+                    provider: MTN_MOMO_ZMB
+                    phoneNumber: '260763456789'
+                customerMessage: Note of 4 to 22 chars
+                metadata:
+                  - orderId: ORD-123456789
+                  - customerId: customer@email.com
+                    isPII: true
+              - amount: '15'
+                currency: ZMW
+                payoutId: '{{secondGeneratedUUID}}'
+                recipient:
+                  type: MMO
+                  accountDetails:
+                    provider: MTN_MOMO_ZMB
+                    phoneNumber: '260763456789'
+                customerMessage: Note of 4 to 22 chars
+                metadata:
+                  - orderId: ORD-123456789
+                  - customerId: customer@email.com
+                    isPII: true
+  /v2/payouts/{payoutId}:
+    get:
+      summary: Check payout status
+      responses:
+        '200':
+          description: COMPLETED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      payoutId:
+                        type: string
+                      status:
+                        type: string
+                      amount:
+                        type: string
+                        format: utc-millisec
+                      currency:
+                        type: string
+                      country:
+                        type: string
+                      recipient:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                          accountDetails:
+                            type: object
+                            properties:
+                              phoneNumber:
+                                type: string
+                                format: utc-millisec
+                              provider:
+                                type: string
+                      customerMessage:
+                        type: string
+                      created:
+                        type: string
+                        format: date-time
+                      providerTransactionId:
+                        type: string
+                        format: utc-millisec
+                      metadata:
+                        type: object
+                        properties:
+                          orderId:
+                            type: string
+                          customerId:
+                            type: string
+                            format: email
+              example:
+                status: FOUND
+                data:
+                  payoutId: 8917c345-4791-4285-a416-62f24b6982db
+                  status: COMPLETED
+                  amount: '123.00'
+                  currency: ZMW
+                  country: ZMB
+                  recipient:
+                    type: MMO
+                    accountDetails:
+                      phoneNumber: '260763456789'
+                      provider: MTN_MOMO_ZMB
+                  customerMessage: From ACME company
+                  created: '2020-10-19T08:17:01Z'
+                  providerTransactionId: '12356789'
+                  metadata:
+                    orderId: ORD-123456789
+                    customerId: customer@email.com
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - payouts
+    parameters:
+      - name: payoutId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the payout that you are performing this operation
+          on.
+        schema:
+          type: string
+        example: '{{lastPayoutId}}'
+  /v2/payouts/resend-callback/{payoutId}:
+    post:
+      summary: Resend payout callback
+      responses:
+        '200':
+          description: ACCEPTED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: ACCEPTED
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - payouts
+      description: >
+        Resends the callback for a payout to your configured callback URL. The
+        payout must have reached a final state.
+
+
+        Please ensure your implementation of callback handling follows the
+        guidelines in [Handling
+        callbacks](#section/Implementation/Handling-callbacks).
+    parameters:
+      - name: payoutId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the payout that you are performing this operation
+          on.
+        schema:
+          type: string
+        example: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+  /v2/payouts/fail-enqueued/{payoutId}:
+    post:
+      summary: Cancel enqueued payout
+      responses:
+        '200':
+          description: ACCEPTED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: ACCEPTED
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - payouts
+    parameters:
+      - name: payoutId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the payout that you are performing this operation
+          on.
+        schema:
+          type: string
+        example: '{{lastPayoutId}}'
+  /v2/remittances:
+    post:
+      summary: Initiate remittance
+      responses: {}
+      tags:
+        - remittances
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                remittanceId:
+                  type: string
+                amount:
+                  type: string
+                  format: utc-millisec
+                currency:
+                  type: string
+                recipient:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    accountDetails:
+                      type: object
+                      properties:
+                        provider:
+                          type: string
+                        phoneNumber:
+                          type: string
+                          format: utc-millisec
+                    recipientDetails:
+                      type: object
+                      properties:
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                sender:
+                  type: object
+                  properties:
+                    transactionDetails:
+                      type: object
+                      properties:
+                        transactionReference:
+                          type: string
+                        originalAmount:
+                          type: string
+                          format: color
+                        originalCurrency:
+                          type: string
+                        buyFxRate:
+                          type: string
+                        senderFees:
+                          type: string
+                          format: utc-millisec
+                        purposeOfFunds:
+                          type: string
+                        sourceOfFunds:
+                          type: string
+                    senderDetails:
+                      type: object
+                      properties:
+                        firstName:
+                          type: string
+                        lastName:
+                          type: string
+                        nationality:
+                          type: string
+                        phoneNumber:
+                          type: string
+                          format: utc-millisec
+                        address:
+                          type: object
+                          properties:
+                            addressLine:
+                              type: string
+                            postalCode:
+                              type: string
+                              format: utc-millisec
+                            city:
+                              type: string
+                            country:
+                              type: string
+                        identification:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                            number:
+                              type: string
+                              format: utc-millisec
+                customerMessage:
+                  type: string
+                metadata:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      orderId:
+                        type: string
+            example:
+              remittanceId: '{{generatedUUID}}'
+              amount: '15'
+              currency: ZMW
+              recipient:
+                type: MMO
+                accountDetails:
+                  provider: MTN_MOMO_ZMB
+                  phoneNumber: '260763456789'
+                recipientDetails:
+                  firstName: John
+                  lastName: Doe
+              sender:
+                transactionDetails:
+                  transactionReference: de83150a-5916-48a2-b048-bd85e022cb55
+                  originalAmount: '100'
+                  originalCurrency: USD
+                  buyFxRate: '23.88'
+                  senderFees: '1'
+                  purposeOfFunds: FAMILY_SUPPORT
+                  sourceOfFunds: SALARY
+                senderDetails:
+                  firstName: Jane
+                  lastName: Doe
+                  nationality: USA
+                  phoneNumber: '12124567890'
+                  address:
+                    addressLine: 1476 Sandhill Rd
+                    postalCode: '84058'
+                    city: Orem
+                    country: USA
+                  identification:
+                    type: PASSPORT
+                    number: '123456789'
+              customerMessage: Note of 4 to 22 chars
+              metadata:
+                - orderId: ORD-123456789
+                - customerId: customer@email.com
+                  isPII: true
+  /v2/remittances/bulk:
+    post:
+      summary: Initiate bulk remittances
+      responses: {}
+      tags:
+        - remittances
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  remittanceId:
+                    type: string
+                  amount:
+                    type: string
+                    format: utc-millisec
+                  currency:
+                    type: string
+                  recipient:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      accountDetails:
+                        type: object
+                        properties:
+                          provider:
+                            type: string
+                          phoneNumber:
+                            type: string
+                            format: utc-millisec
+                      recipientDetails:
+                        type: object
+                        properties:
+                          firstName:
+                            type: string
+                          lastName:
+                            type: string
+                  sender:
+                    type: object
+                    properties:
+                      transactionDetails:
+                        type: object
+                        properties:
+                          transactionReference:
+                            type: string
+                          originalAmount:
+                            type: string
+                            format: color
+                          originalCurrency:
+                            type: string
+                          buyFxRate:
+                            type: string
+                          senderFees:
+                            type: string
+                            format: utc-millisec
+                          purposeOfFunds:
+                            type: string
+                          sourceOfFunds:
+                            type: string
+                      senderDetails:
+                        type: object
+                        properties:
+                          firstName:
+                            type: string
+                          lastName:
+                            type: string
+                          nationality:
+                            type: string
+                          phoneNumber:
+                            type: string
+                            format: utc-millisec
+                          address:
+                            type: object
+                            properties:
+                              addressLine:
+                                type: string
+                              postalCode:
+                                type: string
+                                format: utc-millisec
+                              city:
+                                type: string
+                              country:
+                                type: string
+                          identification:
+                            type: object
+                            properties:
+                              type:
+                                type: string
+                              number:
+                                type: string
+                                format: utc-millisec
+                  customerMessage:
+                    type: string
+                  metadata:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        orderId:
+                          type: string
+            example:
+              - remittanceId: '{{generatedUUID}}'
+                amount: '15'
+                currency: ZMW
+                recipient:
+                  type: MMO
+                  accountDetails:
+                    provider: MTN_MOMO_ZMB
+                    phoneNumber: '260763456789'
+                  recipientDetails:
+                    firstName: John
+                    lastName: Doe
+                sender:
+                  transactionDetails:
+                    transactionReference: de83150a-5916-48a2-b048-bd85e022cb55
+                    originalAmount: '100'
+                    originalCurrency: USD
+                    buyFxRate: '23.88'
+                    senderFees: '1'
+                    purposeOfFunds: FAMILY_SUPPORT
+                    sourceOfFunds: SALARY
+                  senderDetails:
+                    firstName: Jane
+                    lastName: Doe
+                    nationality: USA
+                    phoneNumber: '12124567890'
+                    address:
+                      addressLine: 1476 Sandhill Rd
+                      postalCode: '84058'
+                      city: Orem
+                      country: USA
+                    identification:
+                      type: PASSPORT
+                      number: '123456789'
+                customerMessage: Note of 4 to 22 chars
+                metadata:
+                  - orderId: ORD-123456789
+                  - customerId: customer@email.com
+                    isPII: true
+              - remittanceId: '{{secondGeneratedUUID}}'
+                amount: '15'
+                currency: ZMW
+                recipient:
+                  type: MMO
+                  accountDetails:
+                    provider: MTN_MOMO_ZMB
+                    phoneNumber: '260763456789'
+                  recipientDetails:
+                    firstName: John
+                    lastName: Doe
+                sender:
+                  transactionDetails:
+                    transactionReference: a1b2c3d4-5916-48a2-b048-bd85e022cb56
+                    originalAmount: '100'
+                    originalCurrency: USD
+                    buyFxRate: '23.88'
+                    senderFees: '1'
+                    purposeOfFunds: FAMILY_SUPPORT
+                    sourceOfFunds: SALARY
+                  senderDetails:
+                    firstName: Jane
+                    lastName: Doe
+                    nationality: USA
+                    phoneNumber: '12124567890'
+                    address:
+                      addressLine: 1476 Sandhill Rd
+                      postalCode: '84058'
+                      city: Orem
+                      country: USA
+                    identification:
+                      type: PASSPORT
+                      number: '123456789'
+                customerMessage: Note of 4 to 22 chars
+                metadata:
+                  - orderId: ORD-123456789
+                  - customerId: customer@email.com
+                    isPII: true
+  /v2/remittances/{remittanceId}:
+    get:
+      summary: Check remittance status
+      responses: {}
+      tags:
+        - remittances
+    parameters:
+      - name: remittanceId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the remittance that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastRemittanceId}}'
+  /v2/remittances/resend-callback/{remittanceId}:
+    post:
+      summary: Resend remittance callback
+      responses: {}
+      tags:
+        - remittances
+    parameters:
+      - name: remittanceId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the remittance that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastRemittanceId}}'
+  /v2/remittances/fail-enqueued/{remittanceId}:
+    post:
+      summary: Cancel enqueued remittance
+      responses: {}
+      tags:
+        - remittances
+    parameters:
+      - name: remittanceId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the remittance that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastRemittanceId}}'
+  /v2/refunds:
+    post:
+      summary: Initiate refund
+      parameters:
+        - name: Content-Digest
+          in: header
+          schema:
+            type: string
+          example: quis minim
+        - name: Signature
+          in: header
+          schema:
+            type: string
+          example: culpa Excepteur
+        - name: Signature-Input
+          in: header
+          schema:
+            type: string
+          example: aute adipisicing qui esse
+        - name: Accept-Signature
+          in: header
+          schema:
+            type: string
+          example: eu exercitation
+        - name: Accept-Digest
+          in: header
+          schema:
+            type: string
+          example: exercitation ea in laboris
+      responses:
+        '200':
+          description: ACCEPTED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refundId:
+                    type: string
+                  status:
+                    type: string
+                  created:
+                    type: string
+                    format: date-time
+              example:
+                refundId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: ACCEPTED
+                created: '2020-10-19T11:17:01Z'
+        '400':
+          description: INVALID_INPUT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refundId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                refundId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: INVALID_INPUT
+                  failureMessage: >-
+                    We are unable to parse the body of the request. Please
+                    consult API documentation for valid request payload.
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refundId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                refundId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refundId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                refundId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - refunds
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: string
+                  format: utc-millisec
+                currency:
+                  type: string
+                depositId:
+                  type: string
+                refundId:
+                  type: string
+                metadata:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      orderId:
+                        type: string
+            example:
+              amount: '15'
+              currency: ZMW
+              depositId: '{{lastDepositId}}'
+              refundId: '{{generatedUUID}}'
+              metadata:
+                - orderId: ORD-123456789
+                - customerId: customer@email.com
+                  isPII: true
+  /v2/refunds/{refundId}:
+    get:
+      summary: Check refund status
+      responses:
+        '200':
+          description: COMPLETED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      refundId:
+                        type: string
+                      status:
+                        type: string
+                      amount:
+                        type: string
+                        format: utc-millisec
+                      currency:
+                        type: string
+                      country:
+                        type: string
+                      recipient:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                          accountDetails:
+                            type: object
+                            properties:
+                              phoneNumber:
+                                type: string
+                                format: utc-millisec
+                              provider:
+                                type: string
+                      customerMessage:
+                        type: string
+                      created:
+                        type: string
+                        format: date-time
+                      providerTransactionId:
+                        type: string
+                        format: utc-millisec
+                      metadata:
+                        type: object
+                        properties:
+                          orderId:
+                            type: string
+                          customerId:
+                            type: string
+                            format: email
+              example:
+                status: FOUND
+                data:
+                  refundId: 8917c345-4791-4285-a416-62f24b6982db
+                  status: COMPLETED
+                  amount: '123.00'
+                  currency: ZMW
+                  country: ZMB
+                  recipient:
+                    type: MMO
+                    accountDetails:
+                      phoneNumber: '260763456789'
+                      provider: MTN_MOMO_ZMB
+                  customerMessage: From ACME company
+                  created: '2020-10-19T08:17:01Z'
+                  providerTransactionId: '12356789'
+                  metadata:
+                    orderId: ORD-123456789
+                    customerId: customer@email.com
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refundId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                refundId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refundId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                refundId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - refunds
+    parameters:
+      - name: refundId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the refund that you are performing this operation
+          on.
+        schema:
+          type: string
+        example: '{{lastRefundId}}'
+  /v2/refunds/resend-callback/{refundId}:
+    post:
+      summary: Resend refund callback
+      responses:
+        '200':
+          description: ACCEPTED
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: ACCEPTED
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refundId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                refundId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refundId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                refundId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - refunds
+    parameters:
+      - name: refundId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the refund that you are performing this operation
+          on.
+        schema:
+          type: string
+        example: '{{lastRefundId}}'
+  /v2/paymentpage:
+    post:
+      summary: Deposit via Payment Page
+      responses:
+        '200':
+          description: PROVIDER_TEMPORARILY_UNAVAILABLE
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depositId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                depositId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: PROVIDER_TEMPORARILY_UNAVAILABLE
+                  failureMessage: >-
+                    The provider 'MTN_MOMO_ZMB' is currently not able to process
+                    payments. Please consult our status page for downtime
+                    information on all providers. Programmatic access is also
+                    available, please consult our API docs.
+        '400':
+          description: INVALID_INPUT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depositId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                depositId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: INVALID_INPUT
+                  failureMessage: >-
+                    We are unable to parse the body of the request. Please
+                    consult API documentation for valid request payload.
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payoutId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                payoutId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - payment-page
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                depositId:
+                  type: string
+                returnUrl:
+                  type: string
+                  format: uri
+                customerMessage:
+                  type: string
+                amountDetails:
+                  type: object
+                  properties:
+                    amount:
+                      type: string
+                      format: utc-millisec
+                    currency:
+                      type: string
+                phoneNumber:
+                  type: string
+                  format: utc-millisec
+                language:
+                  type: string
+                country:
+                  type: string
+                reason:
+                  type: string
+                metadata:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      orderId:
+                        type: string
+            example:
+              depositId: '{{generatedUUID}}'
+              returnUrl: https://merchant.com/paymentProcessed
+              customerMessage: Note of 4 to 22 chars
+              amountDetails:
+                amount: '15'
+                currency: ZMW
+              phoneNumber: '260763456789'
+              language: EN
+              country: ZMB
+              reason: Ticket to festival
+              metadata:
+                - orderId: ORD-123456789
+                - customerId: customer@email.com
+                  isPII: true
+  /v2/wallet-balances:
+    get:
+      summary: Wallet balances
+      parameters:
+        - name: country
+          in: query
+          description: >
+            The country you wish to limit the results to.
+
+
+            Format is ISO 3166-1 alpha-3, three character country code in upper
+            case. Read more from
+            [wikipedia](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-3#Officially_assigned_code_elements).
+          schema:
+            type: string
+          example: ZMB
+      responses:
+        '200':
+          description: Request has been succesfully processed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balances:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        country:
+                          type: string
+                        balance:
+                          type: string
+                        currency:
+                          type: string
+                        provider:
+                          type: string
+              example:
+                balances:
+                  - country: ZMB
+                    balance: '21798.03'
+                    currency: ZMW
+                    provider: ''
+                  - country: UGA
+                    balance: '10798.03'
+                    currency: UGX
+                    provider: ''
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - finances
+  /v2/statements:
+    post:
+      summary: Initiate statement
+      responses: {}
+      tags:
+        - finances
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                wallet:
+                  type: object
+                  properties:
+                    country:
+                      type: string
+                    currency:
+                      type: string
+                callbackUrl:
+                  type: string
+                  format: uri
+                startDate:
+                  type: string
+                  format: style
+                endDate:
+                  type: string
+                compressed:
+                  type: boolean
+            example:
+              wallet:
+                country: ZMB
+                currency: ZMW
+              callbackUrl: https://merchant.com/statementCallbacks
+              startDate: '2025-05-04T10:00:00'
+              endDate: '2025-05-11T10:00:00'
+              compressed: false
+  /v2/statements/{statementId}:
+    get:
+      summary: Check statement status
+      responses: {}
+      tags:
+        - finances
+    parameters:
+      - name: statementId
+        in: path
+        required: true
+        description: >-
+          (Required) The id of the statement that you are performing this
+          operation on.
+        schema:
+          type: string
+        example: '{{lastStatementId}}'
+  /v2/availability:
+    get:
+      summary: Provider Availability
+      parameters:
+        - name: country
+          in: query
+          schema:
+            type: string
+          example: ZMB
+        - name: operationType
+          in: query
+          description: >
+            The operation for which you want to get provider availabiity
+            information for.
+          schema:
+            type: string
+          example: DEPOSIT
+      responses:
+        '200':
+          description: If a request has been processed by pawaPay successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    country:
+                      type: string
+                    providers:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          provider:
+                            type: string
+                          operationTypes:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                operationType:
+                                  type: string
+                                status:
+                                  type: string
+              example:
+                - country: GHA
+                  providers:
+                    - provider: VODAFONE_GHA
+                      operationTypes:
+                        - operationType: DEPOSIT
+                          status: OPERATIONAL
+                        - operationType: PAYOUT
+                          status: DELAYED
+                    - provider: MTN_MOMO_GHA
+                      operationTypes:
+                        - operationType: DEPOSIT
+                          status: OPERATIONAL
+                        - operationType: PAYOUT
+                          status: OPERATIONAL
+                    - provider: AIRTELTIGO_GHA
+                      operationTypes:
+                        - operationType: DEPOSIT
+                          status: CLOSED
+                        - operationType: PAYOUT
+                          status: DELAYED
+                - country: ZMB
+                  providers:
+                    - provider: MTN_MOMO_ZMB
+                      operationTypes:
+                        - operationType: DEPOSIT
+                          status: CLOSED
+                        - operationType: PAYOUT
+                          status: OPERATIONAL
+                    - provider: AIRTEL_OAPI_ZMB
+                      operationTypes:
+                        - operationType: DEPOSIT
+                          status: OPERATIONAL
+                        - operationType: PAYOUT
+                          status: DELAYED
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - toolkit
+  /v2/active-conf:
+    get:
+      summary: Active Configuration
+      parameters:
+        - name: country
+          in: query
+          description: >
+            The country you wish to limit the results to.
+
+
+            Format is ISO 3166-1 alpha-3, three character country code in upper
+            case. Read more from
+            [wikipedia](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-3#Officially_assigned_code_elements).
+          schema:
+            type: string
+          example: ZMB
+        - name: operationType
+          in: query
+          description: |
+            The operation you wish to limit the results to.
+          schema:
+            type: string
+          example: DEPOSIT
+      responses:
+        '200':
+          description: If a request has been processed by pawaPay successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+              example: |-
+                {
+                  "companyName": "Merchant Inc.",
+                  "signatureConfiguration": {
+                    "signedRequestsOnly": true,
+                    "signedCallbacks": true
+                  },
+                  "countries": [
+                    {
+                      "country": "BEN",
+                      "displayName": {
+                        "en": "Benin",
+                        "fr": "Le Benin"
+                      },
+                      "prefix": "229",
+                      "flag": "https://cdn.com/ben_flag.png",
+                      "providers": [
+                        {
+                          "provider": "MTN_MOMO_BEN",
+                          "displayName": "MTN",
+                          "logo": "https://cdn.com/mtn_logo.png",
+                          "nameDisplayedToCustomer": "Merchant Inc.",
+                          "currencies": [
+                            {
+                              "currency": "XOF",
+                              "displayName": "KSh",
+                              "operationTypes": [
+                                {
+                                  "DEPOSIT": {
+                                    "authType": "PROVIDER_AUTH",
+                                    "pinPrompt": "AUTOMATIC",
+                                    "pinPromptRevivable": true,
+                                    "pinPromptInstructions": {
+                                      "channels": [
+                                        {
+                                          "type": "USSD",
+                                          "displayName": {
+                                            "en": "Not getting the PIN prompt?",
+                                            "fr": "Not getting Le Pin prompt"
+                                          },
+                                          "quickLink": "tel*182*1*3%23",
+                                          "instructions": {
+                                            "en": [
+                                              {
+                                                "text": "Dial *182# on your phone",
+                                                "template": "Dial "{{shortCode}}" on your phone",
+                                                "variables": {
+                                                  "shortCode": "*182#"
+                                                }
+                                              }
+                                            ],
+                                            "fr": [
+                                              {
+                                                "text": "Composez *182# sur votre téléphone",
+                                                "template": "Composez "{{shortCode}}" sur votre téléphone",
+                                                "variables": {
+                                                  "shortCode": "*182#"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    "minTransactionLimit": "1",
+                                    "maxTransactionLimit": "1000",
+                                    "decimalsInAmount": "NONE",
+                                    "status": "OPERATIONAL",
+                                    "callbackUrl": "https://merchant.com/depositCallback"
+                                  }
+                                },
+                                {
+                                  "operationType": "PAYOUT",
+                                  "minTransactionLimit": "1",
+                                  "maxTransactionLimit": "1000",
+                                  "decimalsInAmount": "NONE",
+                                  "status": "DELAYED",
+                                  "callbackUrl": "https://merchant.com/payoutCallback"
+                                },
+                                {
+                                  "operationType": "REFUND",
+                                  "minTransactionLimit": "1",
+                                  "maxTransactionLimit": "1000",
+                                  "decimalsInAmount": "NONE",
+                                  "status": "CLOSED",
+                                  "callbackUrl": "https://merchant.com/refundCallback"
+                                },
+                                {
+                                  "operationType": "USSD_DEPOSIT",
+                                  "callbackUrl": "https://merchant.com/ussdCallback"
+                                },
+                                {
+                                  "operationType": "NAME_LOOKUP"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - toolkit
+  /v2/predict-provider:
+    post:
+      summary: Predict Provider
+      responses:
+        '200':
+          description: Provider prediction was completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  country:
+                    type: string
+                  provider:
+                    type: string
+                  msisdn:
+                    type: string
+                    format: utc-millisec
+              example:
+                country: ZMB
+                provider: MTN_MOMO_ZMB
+                msisdn: '260763456789'
+        '400':
+          description: INVALID_INPUT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  depositId:
+                    type: string
+                  status:
+                    type: string
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                depositId: f4401bd2-1568-4140-bf2d-eb77d2b2b639
+                status: REJECTED
+                failureReason:
+                  failureCode: INVALID_INPUT
+                  failureMessage: >-
+                    We are unable to parse the body of the request. Please
+                    consult API documentation for valid request payload.
+        '401':
+          description: >-
+            Authentication failed. Make sure you have added the API token into
+            the header. If using signatures, make sure they are valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: AUTHENTICATION_ERROR
+                  failureMessage: The API token in the request is invalid.
+        '403':
+          description: Authorization failure. Please check your authentication token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: AUTHORISATION_ERROR
+                  failureMessage: >-
+                    The API token in the request is not authorised for this
+                    endpoint.
+        '500':
+          description: An unknown failure has occured.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  failureReason:
+                    type: object
+                    properties:
+                      failureCode:
+                        type: string
+                      failureMessage:
+                        type: string
+              example:
+                failureReason:
+                  failureCode: UNKNOWN_ERROR
+                  failureMessage: Unable to process request due to an unknown problem.
+      tags:
+        - toolkit
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phoneNumber:
+                  type: string
+            example:
+              phoneNumber: +260 763-456789
+  /v2/public-key/http:
+    get:
+      summary: Public Keys
+      responses:
+        '200':
+          description: If a request has been processed by pawaPay successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      format: style
+                    key:
+                      type: string
+              example:
+                - id: HTTP_EC_P256_KEY:1
+                  key: >
+                    -----BEGIN PUBLIC KEY-----
+
+                    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYZe9jhnaZKw9ykMBe2IwRg6AgVMx
+
+                    2JRE3RMIdf4YazZTaQaUO19uDI5UO0QsTG699UeI+emd63/GY1PyOpf1rw==
+
+                    -----END PUBLIC KEY-----
+      tags:
+        - toolkit
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+security:
+  - BearerAuth: []

@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "TOPUP",
+    "slug": "topup-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "backgroundColor": "#f3f2f2",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#ec3013"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {},
+    "plugins": [
+      "expo-font",
+      "expo-localization"
+    ]
+  }
+}

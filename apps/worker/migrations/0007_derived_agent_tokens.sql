@@ -1,0 +1,11 @@
+-- Per-server agent tokens are now derived from AGENT_SIGNING_KEY at call time
+-- (HMAC over the server id) instead of being stored. Dropping the column takes
+-- the fleet's peer-management credentials out of the database entirely, so a
+-- D1 dump or a stray support query no longer exposes them.
+--
+-- Deploy order matters: set AGENT_SIGNING_KEY, re-run the installer on every
+-- box with the derived token from GET /admin/endpoints/:code/token, THEN apply
+-- this migration. Between the key landing and the boxes being updated, agent
+-- calls fail with 401 — peers already installed keep working, but provisioning
+-- and the expiry sweep stall until the tokens match.
+ALTER TABLE servers DROP COLUMN agent_token;

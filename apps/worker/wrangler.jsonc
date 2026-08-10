@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "topup-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // Control-plane store. The catalogue and the admin console's transaction
+  // fixtures are still in-memory; only VPN state is persisted so far.
+  "d1_databases": [{ "binding": "DB", "database_name": "topup", "database_id": "REPLACE_ME" }],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "vars": { "ENVIRONMENT": "production", "DEVICE_LIMIT": "3" }
+}

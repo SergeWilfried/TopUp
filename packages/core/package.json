@@ -1,0 +1,13 @@
+{
+  "name": "@topup/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./locales/*": "./src/locales/*.js"
+  },
+  "sideEffects": false
+}

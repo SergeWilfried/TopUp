@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="styles.css">
+<style>
+body{margin:0;background:#dedcdc;display:flex;justify-content:center;padding:32px 0;min-height:100vh}
+a{color:#ec3013}a:hover{color:#ae1800}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+</style>
+</helmet>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="430px,880px">
+<div style="height:100%;display:flex;flex-direction:column;padding-top:54px;background:#f3f2f2;color:#201e1d;font-family:'Archivo',system-ui,sans-serif">
+
+<sc-if value="{{isWelcome}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;display:flex;flex-direction:column">
+  <div style="padding:20px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <div style="font-weight:800;font-size:20px;letter-spacing:-.01em">{{brandName}}<span style="color:#ec3013">.</span></div>
+  </div>
+  <div style="flex:1;background:#ec3013;color:#f3f2f2;padding:28px 20px;display:flex;flex-direction:column;justify-content:flex-end">
+    <div style="font-size:44px;font-weight:800;line-height:1;letter-spacing:-.02em">Airtime,<br>data &amp;<br>eSIMs.<br>In seconds.</div>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:10px">
+    <div style="font-size:13px;color:rgba(32,30,29,.6)">Orange · MTN · Moov — pay with mobile money or card. No account fees.</div>
+    <button class="btn btn-primary btn-block" onClick="{{goLogin}}" style="min-height:48px;font-size:15px">GET STARTED →</button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isLogin}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <button class="btn btn-ghost" onClick="{{goWelcome}}">←</button>
+    <div style="font-size:11px;letter-spacing:.12em;font-weight:600">SIGN IN</div>
+  </div>
+  <div style="padding:24px 20px;display:flex;flex-direction:column;gap:20px">
+    <h2 style="font-size:26px;margin:0">Your phone number is your account.</h2>
+    <div class="field">
+      <label>Phone number</label>
+      <input class="input" value="{{phone}}" onChange="{{onPhone}}" placeholder="07 00 00 00 00" style="font-size:18px;font-weight:600;letter-spacing:.02em;min-height:48px">
+      <div style="font-size:12px;color:#ec3013;margin-top:6px">{{loginDetect}}</div>
+    </div>
+    <button class="btn btn-primary btn-block" onClick="{{sendOtp}}" disabled="{{phoneInvalid}}" style="min-height:48px;font-size:15px">SEND CODE →</button>
+    <div style="font-size:12px;color:rgba(32,30,29,.55)">We will text a 4-digit code to verify this number. Standard SMS rates apply.</div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isOtp}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <button class="btn btn-ghost" onClick="{{goLogin}}">←</button>
+    <div style="font-size:11px;letter-spacing:.12em;font-weight:600">VERIFY</div>
+  </div>
+  <div style="padding:24px 20px;display:flex;flex-direction:column;gap:20px">
+    <div>
+      <h2 style="font-size:26px;margin:0 0 6px">Enter the code</h2>
+      <div style="font-size:13px;color:rgba(32,30,29,.6)">Sent by SMS to <b>{{phone}}</b></div>
+    </div>
+    <input class="input" value="{{otp}}" onChange="{{onOtp}}" placeholder="0000" maxLength="4" inputMode="numeric" style="font-size:32px;font-weight:800;letter-spacing:.5em;text-align:center;min-height:64px">
+    <sc-if value="{{otpError}}" hint-placeholder-val="{{ false }}">
+      <div style="border:2px solid #ec3013;color:#ae1800;padding:10px 14px;font-size:13px;font-weight:600">Wrong code — try again. (Hint: it's 1234.)</div>
+    </sc-if>
+    <button class="btn btn-primary btn-block" onClick="{{verifyOtp}}" disabled="{{otpInvalid}}" style="min-height:48px;font-size:15px;animation:{{otpAnim}}">{{otpLabel}}</button>
+    <button class="btn btn-ghost" onClick="{{resendOtp}}" style="align-self:flex-start;font-size:13px">{{resendLabel}}</button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isHome}}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;overflow:auto;display:flex;flex-direction:column">
+  <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid rgba(32,30,29,.4)">
+    <div style="font-weight:800;font-size:20px;letter-spacing:-.01em">{{brandName}}<span style="color:#ec3013">.</span></div>
+    <span class="tag tag-accent" style="font-weight:600;white-space:nowrap;flex:none">{{pointsNbsp}}&nbsp;PTS</span>
+  </div>
+  <div style="padding:24px 20px 20px">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#ec3013;margin-bottom:8px">Quick buy</div>
+    <h1 style="font-size:32px;line-height:1.08;letter-spacing:-.02em;margin:0 0 20px">Airtime &amp; data,<br>in seconds.</h1>
+    <div style="display:grid;grid-template-columns:1fr 1fr;border:2px solid #201e1d">
+      <div onClick="{{buyAirtime}}" style="padding:18px 16px;border-right:2px solid #201e1d;cursor:pointer;display:flex;flex-direction:column;gap:22px" style-hover="background:#fff2ef">
+        <div style="font-size:22px;font-weight:800;line-height:1">₣</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;font-weight:800;font-size:14px;letter-spacing:.06em">AIRTIME<span>→</span></div>
+      </div>
+      <div onClick="{{buyData}}" style="padding:18px 16px;cursor:pointer;display:flex;flex-direction:column;gap:22px" style-hover="background:#fff2ef">
+        <div style="font-size:22px;font-weight:800;line-height:1">GB</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;font-weight:800;font-size:14px;letter-spacing:.06em">DATA<span>→</span></div>
+      </div>
+    </div>
+  </div>
+  <div onClick="{{dealBuy}}" style="margin:0 20px 20px;background:#ec3013;color:#f3f2f2;padding:16px;cursor:pointer;display:flex;align-items:center;gap:14px" style-hover="background:#dd2b0f">
+    <div style="flex:1">
+      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.85;margin-bottom:4px">Daily deal · Today only</div>
+      <div style="font-weight:800;font-size:18px;line-height:1.15;letter-spacing:-.01em">2 GB for 800 FCFA</div>
+      <div style="font-size:12px;opacity:.85;margin-top:2px"><s>1 200 FCFA</s> · valid 7 days · all networks</div>
+    </div>
+    <div style="font-weight:800;font-size:20px">→</div>
+  </div>
+  <div style="padding:0 20px 8px">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(32,30,29,.55);padding-bottom:8px;border-bottom:2px solid rgba(32,30,29,.4)">Recent recipients</div>
+    <sc-for list="{{recents}}" as="r" hint-placeholder-count="2">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid rgba(32,30,29,.25)">
+        <div style="width:34px;height:34px;flex:none;border:1.5px solid #201e1d;display:grid;place-items:center;font-weight:800;font-size:12px">{{r.initials}}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600">{{r.name}}</div>
+          <div style="font-size:12px;color:rgba(32,30,29,.55)">{{r.carrier}} · {{r.phone}}</div>
+        </div>
+        <button class="btn btn-ghost" onClick="{{r.onRepeat}}" style="font-size:12px">BUY →</button>
+      </div>
+    </sc-for>
+  </div>
+  <div style="padding:14px 20px 20px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;padding-bottom:8px;border-bottom:2px solid rgba(32,30,29,.4)">
+      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(32,30,29,.55)">Activity</div>
+      <a onClick="{{goHistory}}" style="font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:3px">All →</a>
+    </div>
+    <sc-for list="{{homeActivity}}" as="t" hint-placeholder-count="2">
+      <div style="display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid rgba(32,30,29,.25);font-size:13px">
+        <div><div style="font-weight:600">{{t.desc}}</div><div style="font-size:11px;color:rgba(32,30,29,.55)">{{t.meta}}</div></div>
+        <div style="font-weight:800">{{t.amount}}</div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isHistory}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="padding:14px 20px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <h2 style="font-size:24px;margin:0">History</h2>
+  </div>
+  <div style="padding:4px 20px 20px">
+    <sc-for list="{{history}}" as="t" hint-placeholder-count="4">
+      <div style="display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid rgba(32,30,29,.25)">
+        <div style="min-width:0">
+          <div style="font-size:14px;font-weight:600">{{t.desc}}</div>
+          <div style="font-size:11px;color:rgba(32,30,29,.55)">{{t.meta}}</div>
+        </div>
+        <div style="text-align:right;flex:none">
+          <div style="font-weight:800;font-size:14px">{{t.amount}}</div>
+          <div style="font-size:10px;letter-spacing:.08em;color:#ec3013">{{t.status}}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isRewards}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="padding:14px 20px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <h2 style="font-size:24px;margin:0">Rewards</h2>
+  </div>
+  <div style="background:#ec3013;color:#f3f2f2;padding:24px 20px">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.85">Points balance</div>
+    <div style="font-size:52px;font-weight:800;line-height:1.05;letter-spacing:-.02em">{{pointsFmt}}</div>
+    <div style="font-size:12px;margin-top:6px;opacity:.85">1 point per 100 F spent · never expires</div>
+  </div>
+  <div style="padding:20px">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(32,30,29,.55);padding-bottom:8px;border-bottom:2px solid rgba(32,30,29,.4)">Redeem</div>
+    <sc-for list="{{redeems}}" as="r" hint-placeholder-count="3">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid rgba(32,30,29,.25)">
+        <div>
+          <div style="font-size:14px;font-weight:600">{{r.name}}</div>
+          <div style="font-size:11px;color:rgba(32,30,29,.55)">{{r.cost}} pts</div>
+        </div>
+        <button class="btn btn-secondary" onClick="{{r.onRedeem}}" disabled="{{r.disabled}}" style="font-size:12px">REDEEM</button>
+      </div>
+    </sc-for>
+    <div style="margin-top:16px;font-size:12px;color:rgba(32,30,29,.55)">{{redeemNote}}</div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isProfile}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="padding:14px 20px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <h2 style="font-size:24px;margin:0">Profile</h2>
+  </div>
+  <div style="padding:20px 20px 8px;display:flex;align-items:center;gap:14px">
+    <div style="width:52px;height:52px;flex:none;border:2px solid #201e1d;display:grid;place-items:center;font-weight:800;font-size:18px">KA</div>
+    <div style="min-width:0">
+      <div style="font-weight:800;font-size:18px">Kouassi A.</div>
+      <div style="font-size:13px;color:rgba(32,30,29,.55)">Orange · 07 09 55 12 34</div>
+    </div>
+  </div>
+  <div style="padding:12px 20px 20px">
+    <div style="border-top:2px solid rgba(32,30,29,.4)">
+      <sc-for list="{{profileRows}}" as="r" hint-placeholder-count="4">
+        <div onClick="{{r.onClick}}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 2px;border-bottom:1px solid rgba(32,30,29,.25);cursor:pointer" style-hover="background:#fff2ef">
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:700">{{r.name}}</div>
+            <div style="font-size:11px;color:rgba(32,30,29,.55)">{{r.sub}}</div>
+          </div>
+          <span style="color:#ec3013;font-weight:800;flex:none">→</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:16px;font-size:12px;color:rgba(32,30,29,.55)">{{brandName}} v2.4 · Signed in with this number</div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isEsim}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="padding:14px 14px 14px 14px;border-bottom:2px solid rgba(32,30,29,.4);display:flex;align-items:center;gap:8px">
+    <button class="btn btn-ghost" onClick="{{goProfile}}">←</button>
+    <h2 style="font-size:24px;margin:0;margin-right:auto">eSIMs</h2>
+    <button class="btn btn-primary" onClick="{{goEsimPlans}}" style="font-size:12px">+ NEW ESIM</button>
+  </div>
+  <div style="padding:16px 20px 20px">
+    <sc-for list="{{esimRows}}" as="e" hint-placeholder-count="2">
+      <div style="border:2px solid #201e1d;padding:14px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+          <div style="font-weight:800;font-size:16px">{{e.label}}</div>
+          <span class="tag" style="{{e.tagStyle}}">{{e.statusLabel}}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:rgba(32,30,29,.6);border-bottom:1px solid rgba(32,30,29,.25);padding-bottom:8px">
+          <span>{{e.iccid}}</span><span>{{e.renew}}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="font-size:13px;white-space:nowrap"><b>{{e.dataLeft}}</b> <span style="color:rgba(32,30,29,.55)">data&nbsp;left</span></div>
+          <div style="display:flex;gap:4px;flex:none">
+            <button class="btn btn-ghost" onClick="{{e.onTopUp}}" style="font-size:12px">TOP UP</button>
+            <button class="btn btn-secondary" onClick="{{e.onToggle}}" style="font-size:12px">{{e.toggleLabel}}</button>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+    <div style="font-size:12px;color:rgba(32,30,29,.55)">One eSIM can be active per line. Pausing keeps the profile installed on this phone.</div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isEsimCountry}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <button class="btn btn-ghost" onClick="{{goEsim}}">←</button>
+    <div style="font-size:11px;letter-spacing:.12em;font-weight:600">01 — DESTINATION</div>
+  </div>
+  <div style="padding:20px">
+    <h2 style="font-size:26px;margin:0 0 4px">Where do you need data?</h2>
+    <p style="font-size:13px;color:rgba(32,30,29,.6);margin:0 0 14px">Pick a country or region — plans are priced per destination.</p>
+    <input class="input" value="{{countrySearch}}" onChange="{{onCountrySearch}}" placeholder="Search countries…" style="margin-bottom:14px">
+    <div style="border-top:2px solid rgba(32,30,29,.4)">
+      <sc-for list="{{countryRows}}" as="c" hint-placeholder-count="6">
+        <div onClick="{{c.onClick}}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 2px;border-bottom:1px solid rgba(32,30,29,.25);cursor:pointer" style-hover="background:#fff2ef">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0">
+            <div style="width:30px;height:30px;flex:none;border:1.5px solid #201e1d;display:grid;place-items:center;font-weight:800;font-size:11px">{{c.code}}</div>
+            <div style="min-width:0">
+              <div style="font-size:15px;font-weight:700">{{c.name}}</div>
+              <div style="font-size:11px;color:rgba(32,30,29,.55)">{{c.sub}}</div>
+            </div>
+          </div>
+          <span style="color:#ec3013;font-weight:800;flex:none">→</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isEsimPlans}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <button class="btn btn-ghost" onClick="{{goEsimCountry}}">←</button>
+    <div style="font-size:11px;letter-spacing:.12em;font-weight:600">02 — CHOOSE AN ESIM PLAN</div>
+  </div>
+  <div style="padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <h2 style="font-size:26px;margin:0 0 4px">New eSIM</h2>
+      <span class="tag tag-neutral" style="flex:none">{{esimCountry}}</span>
+    </div>
+    <p style="font-size:13px;color:rgba(32,30,29,.6);margin:0 0 16px">Delivered instantly — install with a QR code, no store visit.</p>
+    <div style="border-top:2px solid rgba(32,30,29,.4)">
+      <sc-for list="{{esimPlanRows}}" as="p" hint-placeholder-count="5">
+        <div onClick="{{p.onClick}}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 2px;border-bottom:1px solid rgba(32,30,29,.25);cursor:pointer" style-hover="background:#fff2ef">
+          <div>
+            <div style="font-size:16px;font-weight:800">{{p.n}}</div>
+            <div style="font-size:11px;color:rgba(32,30,29,.55)">{{p.v}}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <sc-if value="{{p.b}}" hint-placeholder-val="{{ false }}"><span class="tag tag-accent" style="font-size:10px">{{p.b}}</span></sc-if>
+            <div style="font-weight:800;font-size:15px">{{p.priceFmt}}</div>
+            <span style="color:#ec3013;font-weight:800">→</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isRecipient}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <button class="btn btn-ghost" onClick="{{goHome}}">←</button>
+    <div style="font-size:11px;letter-spacing:.12em;font-weight:600">01 — RECIPIENT</div>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:20px">
+    <h2 style="font-size:26px;margin:0">Who is this for?</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid rgba(32,30,29,.4)">
+      <sc-for list="{{whoOpts}}" as="w" hint-placeholder-count="2">
+        <div onClick="{{w.onClick}}" style="{{w.style}}">{{w.label}}</div>
+      </sc-for>
+    </div>
+    <div class="field">
+      <label>Phone number</label>
+      <input class="input" value="{{phone}}" onChange="{{onPhone}}" placeholder="07 00 00 00 00" style="font-size:16px;font-weight:600;letter-spacing:.02em">
+    </div>
+    <div>
+      <div style="font-size:12px;color:rgba(32,30,29,.7);margin-bottom:6px">Network <span style="color:#ec3013">{{detectNote}}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <sc-for list="{{carrierCells}}" as="c" hint-placeholder-count="3">
+          <div onClick="{{c.onClick}}" style="{{c.style}}">
+            <div style="font-weight:800;font-size:14px">{{c.name}}</div>
+            <div style="font-size:10px;color:rgba(32,30,29,.55);letter-spacing:.06em">{{c.sub}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" onClick="{{goPacks}}" disabled="{{phoneInvalid}}" style="min-height:48px;font-size:15px">CONTINUE →</button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isPacks}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <button class="btn btn-ghost" onClick="{{goRecipient}}">←</button>
+    <div style="font-size:11px;letter-spacing:.12em;font-weight:600">02 — CHOOSE A PACK</div>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <h2 style="font-size:26px;margin:0">{{packsTitle}}</h2>
+      <span class="tag tag-neutral">{{carrier}}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid rgba(32,30,29,.4)">
+      <sc-for list="{{serviceOpts}}" as="w" hint-placeholder-count="2">
+        <div onClick="{{w.onClick}}" style="{{w.style}}">{{w.label}}</div>
+      </sc-for>
+    </div>
+    <div style="border-top:2px solid rgba(32,30,29,.4)">
+      <sc-for list="{{packRows}}" as="p" hint-placeholder-count="5">
+        <div onClick="{{p.onClick}}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 2px;border-bottom:1px solid rgba(32,30,29,.25);cursor:pointer" style-hover="background:#fff2ef">
+          <div>
+            <div style="font-size:16px;font-weight:800">{{p.n}}</div>
+            <div style="font-size:11px;color:rgba(32,30,29,.55)">{{p.v}}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <sc-if value="{{p.b}}" hint-placeholder-val="{{ false }}"><span class="tag tag-accent" style="font-size:10px">{{p.b}}</span></sc-if>
+            <div style="font-weight:800;font-size:15px">{{p.priceFmt}}</div>
+            <span style="color:#ec3013;font-weight:800">→</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <sc-if value="{{isAirtimeService}}" hint-placeholder-val="{{ false }}">
+      <div style="border:2px solid #201e1d;padding:14px;margin-top:16px;display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#ec3013">Custom amount</div>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <input class="input" value="{{customAmt}}" onChange="{{onCustomAmt}}" placeholder="e.g. 3 500" inputMode="numeric" style="font-size:18px;font-weight:700;min-height:48px">
+          <button class="btn btn-primary" onClick="{{buyCustom}}" disabled="{{customInvalid}}" style="flex:none;min-height:48px;padding-inline:18px;font-size:14px">BUY →</button>
+        </div>
+        <div style="font-size:11px;color:rgba(32,30,29,.55)">{{customNote}}</div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isPay}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+  <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:2px solid rgba(32,30,29,.4)">
+    <button class="btn btn-ghost" onClick="{{payBack}}">←</button>
+    <div style="font-size:11px;letter-spacing:.12em;font-weight:600">03 — PAYMENT</div>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:18px">
+    <div style="border:2px solid #201e1d;padding:16px">
+      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#ec3013;margin-bottom:10px">Order summary</div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px solid rgba(32,30,29,.25)"><span style="color:rgba(32,30,29,.6)">To</span><span style="font-weight:600">{{summaryTo}}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px solid rgba(32,30,29,.25)"><span style="color:rgba(32,30,29,.6)">Network</span><span style="font-weight:600">{{carrier}}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px solid rgba(32,30,29,.25)"><span style="color:rgba(32,30,29,.6)">Pack</span><span style="font-weight:600">{{summaryPack}}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:16px;padding:10px 0 2px"><span style="font-weight:800">Total</span><span style="font-weight:800">{{totalFmt}}</span></div>
+    </div>
+    <div>
+      <div style="font-size:12px;color:rgba(32,30,29,.7);margin-bottom:6px">Pay with</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{payOpts}}" as="m" hint-placeholder-count="2">
+          <div onClick="{{m.onClick}}" style="{{m.style}}">
+            <div style="width:14px;height:14px;flex:none;border-radius:50%;border:1.5px solid currentColor;background:{{m.dotBg}};box-shadow:{{m.dotShadow}}"></div>
+            <div style="flex:1"><div style="font-weight:700;font-size:14px">{{m.name}}</div><div style="font-size:11px;color:rgba(32,30,29,.55)">{{m.sub}}</div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="font-size:12px;color:rgba(32,30,29,.55)">You will earn <b style="color:#ec3013">{{earnPts}} pts</b> on this purchase.</div>
+    <sc-if value="{{showUssd}}" hint-placeholder-val="{{ false }}">
+      <div style="border:2px solid #201e1d;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#ec3013">Authorize with {{momoName}}</div>
+        <div style="font-size:13px;color:rgba(32,30,29,.7);margin:0">Dial this code to approve the payment from your mobile money account:</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#eae9e9;border:1px solid rgba(32,30,29,.4);padding:10px 14px">
+          <div style="font-weight:800;font-size:22px;letter-spacing:.04em">{{ussdCode}}</div>
+          <button class="btn btn-ghost" onClick="{{copyUssd}}" style="font-size:12px">{{copyLabel}}</button>
+        </div>
+        <button class="btn btn-primary btn-block" onClick="{{dialUssd}}" disabled="{{paying}}" style="min-height:48px;font-size:15px;animation:{{payAnim}}">{{dialLabel}}</button>
+        <div style="font-size:11px;color:rgba(32,30,29,.55)">Waiting for confirmation from {{momoName}}. Your pack is delivered as soon as you approve.</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{showPayBtn}}" hint-placeholder-val="{{ true }}">
+      <button class="btn btn-primary btn-block" onClick="{{pay}}" disabled="{{paying}}" style="min-height:48px;font-size:15px;animation:{{payAnim}}">{{payLabel}}</button>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isSuccess}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;display:flex;flex-direction:column">
+  <div style="background:#ec3013;color:#f3f2f2;padding:36px 20px 28px">
+    <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.85;margin-bottom:8px">Transaction complete</div>
+    <div style="font-size:56px;font-weight:800;line-height:.95;letter-spacing:-.02em">SENT.</div>
+  </div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+    <div style="border-top:2px solid rgba(32,30,29,.4)">
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:10px 0;border-bottom:1px solid rgba(32,30,29,.25)"><span style="color:rgba(32,30,29,.6)">To</span><span style="font-weight:600">{{summaryTo}}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:10px 0;border-bottom:1px solid rgba(32,30,29,.25)"><span style="color:rgba(32,30,29,.6)">Pack</span><span style="font-weight:600">{{summaryPack}} · {{carrier}}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:10px 0;border-bottom:1px solid rgba(32,30,29,.25)"><span style="color:rgba(32,30,29,.6)">Paid</span><span style="font-weight:800">{{totalFmt}}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:10px 0;border-bottom:1px solid rgba(32,30,29,.25)"><span style="color:rgba(32,30,29,.6)">Ref</span><span style="font-weight:600">{{ref}}</span></div>
+    </div>
+    <span class="tag tag-accent" style="align-self:flex-start">+{{earnPts}}&nbsp;POINTS EARNED</span>
+    <sc-if value="{{showEsimInstall}}" hint-placeholder-val="{{ false }}">
+      <div style="border:2px solid #201e1d;padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#ec3013">Install your eSIM</div>
+        <div style="display:flex;gap:14px;align-items:center">
+          <div style="width:84px;height:84px;flex:none;border:2px solid #201e1d;position:relative;background:repeating-linear-gradient(0deg,#201e1d 0 4px,transparent 4px 8px),repeating-linear-gradient(90deg,#201e1d 0 4px,#f3f2f2 4px 8px)">
+            <div style="position:absolute;top:6px;left:6px;width:18px;height:18px;border:4px solid #201e1d;background:#f3f2f2"></div>
+            <div style="position:absolute;top:6px;right:6px;width:18px;height:18px;border:4px solid #201e1d;background:#f3f2f2"></div>
+            <div style="position:absolute;bottom:6px;left:6px;width:18px;height:18px;border:4px solid #201e1d;background:#f3f2f2"></div>
+          </div>
+          <div style="font-size:13px;color:rgba(32,30,29,.7)">Scan this QR from another device — or install directly on this phone in one tap.</div>
+        </div>
+        <button class="btn btn-primary btn-block" onClick="{{installEsim}}" style="min-height:48px;font-size:15px">ADD TO THIS PHONE →</button>
+      </div>
+    </sc-if>
+    <button class="btn btn-primary btn-block" onClick="{{goHome}}" style="min-height:48px;font-size:15px">DONE</button>
+    <sc-if value="{{showBuyAnother}}" hint-placeholder-val="{{ true }}">
+      <button class="btn btn-secondary btn-block" onClick="{{goPacks}}" style="min-height:44px">BUY ANOTHER PACK</button>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{showNav}}" hint-placeholder-val="{{ true }}">
+<div style="display:grid;grid-template-columns:repeat(4,1fr);border-top:2px solid rgba(32,30,29,.4);flex:none">
+  <sc-for list="{{navItems}}" as="n" hint-placeholder-count="3">
+    <div onClick="{{n.onClick}}" style="{{n.style}}">{{n.label}}</div>
+  </sc-for>
+</div>
+</sc-if>
+
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 520, &quot;height&quot;: 940}, &quot;brandName&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;TOPUP&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Brand&quot;}, &quot;showBonuses&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Behavior&quot;}, &quot;startTab&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;home&quot;, &quot;history&quot;, &quot;rewards&quot;], &quot;default&quot;: &quot;home&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Behavior&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'welcome', otp: '', otpError: false, verifying: false, resent: false, customAmt: '', service: 'data', forSelf: true, phone: '07 09 55 12 34',
+    carrier: 'Orange', pack: null, pay: 'momo', paying: false, points: 1240, ussdStep: false, copied: false,
+    esimCountry: 'Côte d’Ivoire', countrySearch: '',
+    esims: [
+      { id: 1, label: 'Orange · Personal', iccid: 'ICCID ···· 8842', status: 'active', dataLeft: '2.4 GB', renew: 'Renews Sep 01' },
+      { id: 2, label: 'Travel · West Africa', iccid: 'ICCID ···· 3317', status: 'paused', dataLeft: '4.8 GB', renew: 'Expires Aug 21' }
+    ],
+    history: [
+      { desc: '1 GB · 7 days', meta: 'AUG 06 · Orange · 07 09 55 12 34', amount: '500 FCFA', status: 'DELIVERED' },
+      { desc: '2 000 FCFA airtime', meta: 'AUG 04 · MTN · 05 44 21 78 90', amount: '2 000 FCFA', status: 'DELIVERED' },
+      { desc: '150 MB · 24 h', meta: 'AUG 02 · Moov · 01 02 33 47 65', amount: '200 FCFA', status: 'DELIVERED' },
+      { desc: '3 GB · 30 days', meta: 'JUL 28 · Orange · 07 09 55 12 34', amount: '1 500 FCFA', status: 'DELIVERED' }
+    ]
+  };
+  carriers = [
+    { name: 'Orange', prefix: '07' },
+    { name: 'MTN', prefix: '05' },
+    { name: 'Moov', prefix: '01' }
+  ];
+  dataPacks = [
+    { n: '150 MB', v: 'Valid 24 h', p: 200 },
+    { n: '1 GB', v: 'Valid 7 days', p: 500 },
+    { n: '3 GB', v: 'Valid 30 days', p: 1500, b: '+500 MB' },
+    { n: '5 GB', v: 'Valid 30 days', p: 2500 },
+    { n: '10 GB', v: 'Valid 30 days', p: 5000, b: '+2 GB' },
+    { n: 'Night 2 GB', v: '00:00–06:00', p: 300 }
+  ];
+  airtimePacks = [
+    { n: '500 FCFA', v: 'Airtime credit', p: 500 },
+    { n: '1 000 FCFA', v: 'Airtime credit', p: 1000, b: '+5% BONUS' },
+    { n: '2 000 FCFA', v: 'Airtime credit', p: 2000, b: '+5% BONUS' },
+    { n: '5 000 FCFA', v: 'Airtime credit', p: 5000, b: '+10% BONUS' },
+    { n: '10 000 FCFA', v: 'Airtime credit', p: 10000, b: '+10% BONUS' }
+  ];
+  esimCountries = [
+    { name: 'Côte d’Ivoire', code: 'CI', sub: 'Home · Orange, MTN, Moov', type: 'home' },
+    { name: 'Ghana', code: 'GH', sub: 'Travel', type: 'travel' },
+    { name: 'Nigeria', code: 'NG', sub: 'Travel', type: 'travel' },
+    { name: 'Senegal', code: 'SN', sub: 'Travel', type: 'travel' },
+    { name: 'France', code: 'FR', sub: 'Travel', type: 'travel' },
+    { name: 'United States', code: 'US', sub: 'Travel', type: 'travel' },
+    { name: 'West Africa', code: 'WA', sub: 'Regional · 8 countries', type: 'region' },
+    { name: 'Global', code: 'GL', sub: '120 countries', type: 'region' }
+  ];
+  esimPlansFor(name) {
+    const c = this.esimCountries.find(x => x.name === name) || this.esimCountries[0];
+    if (c.type === 'home') return [
+      { n: 'Orange eSIM · 5 GB', v: 'Local · Valid 30 days', p: 3000, carrier: 'Orange' },
+      { n: 'MTN eSIM · 10 GB', v: 'Local · Valid 30 days', p: 5000, carrier: 'MTN', b: '+1 GB' },
+      { n: 'Moov eSIM · 3 GB', v: 'Local · Valid 30 days', p: 2000, carrier: 'Moov' }
+    ];
+    if (c.name === 'West Africa') return [
+      { n: 'West Africa · 5 GB', v: 'Regional · 8 countries · 15 days', p: 6500, carrier: 'Travel' },
+      { n: 'West Africa · 10 GB', v: 'Regional · 8 countries · 30 days', p: 11000, carrier: 'Travel', b: 'BEST VALUE' }
+    ];
+    if (c.name === 'Global') return [
+      { n: 'Global · 3 GB', v: 'Travel · 120 countries · 15 days', p: 9000, carrier: 'Travel' },
+      { n: 'Global · 10 GB', v: 'Travel · 120 countries · 30 days', p: 22000, carrier: 'Travel' }
+    ];
+    return [
+      { n: c.name + ' · 1 GB', v: 'Travel · Valid 7 days', p: 3500, carrier: 'Travel' },
+      { n: c.name + ' · 3 GB', v: 'Travel · Valid 15 days', p: 7500, carrier: 'Travel', b: 'POPULAR' },
+      { n: c.name + ' · 10 GB', v: 'Travel · Valid 30 days', p: 16000, carrier: 'Travel' }
+    ];
+  }
+  recentsData = [
+    { name: 'Awa K.', initials: 'AK', phone: '05 44 21 78 90', carrier: 'MTN' },
+    { name: 'Papa', initials: 'PA', phone: '01 02 33 47 65', carrier: 'Moov' }
+  ];
+  fmt(n) { return n.toLocaleString('fr-FR').replace(/\u202f|,/g, ' ') + ' FCFA'; }
+  detect(phone) {
+    const d = phone.replace(/\D/g, '');
+    const c = this.carriers.find(c => d.startsWith(c.prefix));
+    return c ? c.name : null;
+  }
+  go(screen) { this.setState({ screen }); }
+  ussdFor(carrier, pack) {
+    const codes = { Orange: '#144*82*', MTN: '*133*1*', Moov: '*855*4*' };
+    return (codes[carrier] || '*100*') + (pack ? pack.p : '') + '#';
+  }
+  doPay() {
+    const s = this.state;
+    if (s.paying || !s.pack) return;
+    if (s.pay === 'momo' && !s.ussdStep) { this.setState({ ussdStep: true, copied: false }); return; }
+    this.finishPay();
+  }
+  finishPay() {
+    const s = this.state;
+    this.setState({ paying: true });
+    setTimeout(() => {
+      const pts = Math.floor(s.pack.p / 100);
+      const isEsim = s.service === 'esim';
+      const entry = {
+        desc: isEsim ? s.pack.n : (s.service === 'airtime' ? s.pack.n + ' airtime' : s.pack.n + ' · ' + s.pack.v.replace('Valid ', '')),
+        meta: 'AUG 08 · ' + s.carrier + (isEsim ? ' · New eSIM' : ' · ' + s.phone),
+        amount: this.fmt(s.pack.p), status: 'DELIVERED'
+      };
+      this.setState({ paying: false, ussdStep: false, copied: false, screen: 'success', points: s.points + pts, history: [entry, ...s.history] });
+    }, 1400);
+  }
+  renderVals() {
+    const s = this.state, sel = '#ec3013', div = 'rgba(32,30,29,.4)';
+    const brandName = (this.props.brandName ?? 'TOPUP').toUpperCase();
+    const startTab = this.props.startTab; // enum tweak: read once for editor visibility
+    const showBonuses = this.props.showBonuses ?? true;
+    const cellBase = 'padding:10px;text-align:center;cursor:pointer;font-weight:800;font-size:13px;letter-spacing:.06em;';
+    const toggle = (opts, active, onPick) => opts.map(o => ({
+      label: o.label,
+      onClick: () => onPick(o.val),
+      style: cellBase + (o.val === active ? 'background:#201e1d;color:#f3f2f2' : 'color:rgba(32,30,29,.65)')
+    }));
+    const detected = this.detect(s.phone);
+    const packs = (s.service === 'airtime' ? this.airtimePacks : this.dataPacks);
+    const momoName = s.carrier === 'MTN' ? 'MTN MoMo' : s.carrier + ' Money';
+    const payBase = 'display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;border:1px solid ';
+    const digits = s.phone.replace(/\D/g, '');
+    const pts = s.pack ? Math.floor(s.pack.p / 100) : 0;
+    const redeemsData = [
+      { name: '500 FCFA airtime', cost: 500 },
+      { name: '1 GB data pack', cost: 900 },
+      { name: '5 000 FCFA airtime', cost: 4500 }
+    ];
+    return {
+      brandName,
+      isWelcome: s.screen === 'welcome', isLogin: s.screen === 'login', isOtp: s.screen === 'otp',
+      goWelcome: () => this.go('welcome'), goLogin: () => this.go('login'),
+      loginDetect: this.detect(s.phone) ? 'Detected: ' + this.detect(s.phone) : '',
+      sendOtp: () => this.setState({ screen: 'otp', otp: '', otpError: false, resent: false, carrier: this.detect(s.phone) || s.carrier }),
+      otp: s.otp,
+      onOtp: e => this.setState({ otp: e.target.value.replace(/\D/g, '').slice(0, 4), otpError: false }),
+      otpInvalid: s.otp.length < 4 || s.verifying,
+      otpError: s.otpError,
+      otpLabel: s.verifying ? 'VERIFYING…' : 'VERIFY →',
+      otpAnim: s.verifying ? 'pulse 1s infinite' : 'none',
+      verifyOtp: () => {
+        if (s.otp.length < 4 || s.verifying) return;
+        this.setState({ verifying: true });
+        setTimeout(() => {
+          if (this.state.otp === '1234') this.setState({ verifying: false, screen: 'home' });
+          else this.setState({ verifying: false, otpError: true, otp: '' });
+        }, 900);
+      },
+      resendLabel: s.resent ? 'CODE RESENT ✓' : 'RESEND CODE',
+      resendOtp: () => {
+        this.setState({ resent: true });
+        setTimeout(() => this.setState({ resent: false }), 2500);
+      },
+      isHome: s.screen === 'home', isHistory: s.screen === 'history', isRewards: s.screen === 'rewards',
+      isRecipient: s.screen === 'recipient', isPacks: s.screen === 'packs', isPay: s.screen === 'pay', isSuccess: s.screen === 'success',
+      isEsim: s.screen === 'esim', isEsimPlans: s.screen === 'esimPlans', isEsimCountry: s.screen === 'esimCountry',
+      isProfile: s.screen === 'profile',
+      showNav: ['home', 'history', 'rewards', 'profile'].includes(s.screen),
+      goProfile: () => this.go('profile'),
+      profileRows: [
+        { name: 'My eSIMs', sub: s.esims.length + ' profiles · ' + s.esims.filter(e => e.status === 'active').length + ' active', onClick: () => this.go('esim') },
+        { name: 'Payment methods', sub: 'Visa •••• 4921 · ' + (s.carrier === 'MTN' ? 'MTN MoMo' : s.carrier + ' Money'), onClick: () => {} },
+        { name: 'Notifications', sub: 'Deals, delivery receipts', onClick: () => {} },
+        { name: 'Help & support', sub: 'FAQ · Contact us', onClick: () => {} },
+        { name: 'Sign out', sub: 'You will need a new SMS code', onClick: () => this.setState({ screen: 'welcome', otp: '' }) }
+      ],
+      goEsim: () => this.go('esim'), goEsimPlans: () => this.setState({ screen: 'esimCountry', countrySearch: '' }),
+      goEsimCountry: () => this.go('esimCountry'),
+      esimCountry: s.esimCountry,
+      countrySearch: s.countrySearch,
+      onCountrySearch: e => this.setState({ countrySearch: e.target.value }),
+      countryRows: this.esimCountries
+        .filter(c => c.name.toLowerCase().includes(s.countrySearch.trim().toLowerCase()))
+        .map(c => ({ ...c, onClick: () => this.setState({ esimCountry: c.name, screen: 'esimPlans' }) })),
+      esimRows: s.esims.map(e => {
+        const active = e.status === 'active';
+        return {
+          ...e,
+          statusLabel: active ? 'ACTIVE' : 'PAUSED',
+          tagStyle: active ? 'background:#fff2ef;color:#7c1405;font-weight:700' : 'background:#eae7e7;color:#444141;font-weight:700',
+          toggleLabel: active ? 'PAUSE' : 'ACTIVATE',
+          onToggle: () => this.setState({ esims: s.esims.map(x => x.id === e.id ? { ...x, status: active ? 'paused' : 'active' } : x) }),
+          onTopUp: () => this.setState({ service: 'data', forSelf: true, carrier: e.label.startsWith('MTN') ? 'MTN' : e.label.startsWith('Moov') ? 'Moov' : 'Orange', screen: 'packs' })
+        };
+      }),
+      esimPlanRows: this.esimPlansFor(s.esimCountry).map(p => ({
+        n: p.n, v: p.v, b: p.b || null, priceFmt: this.fmt(p.p),
+        onClick: () => this.setState({ service: 'esim', carrier: p.carrier, pack: p, screen: 'pay' })
+      })),
+      showEsimInstall: s.service === 'esim',
+      showBuyAnother: s.service !== 'esim',
+      installEsim: () => {
+        const p = s.pack || {};
+        this.setState({
+          screen: 'esim',
+          esims: [{ id: Date.now(), label: p.n || 'New eSIM', iccid: 'ICCID ···· ' + String(1000 + (Date.now() % 9000)), status: 'active', dataLeft: (p.n || '').split('·').pop().trim() || '—', renew: 'Valid from today' }, ...s.esims]
+        });
+      },
+      pointsFmt: s.points.toLocaleString('fr-FR').replace(/\u202f|,/g, ' '),
+      pointsNbsp: s.points.toLocaleString('fr-FR').replace(/\u202f|,/g, '\u00a0'),
+      dealBuy: () => this.setState({ service: 'data', pack: { n: '2 GB · Daily deal', v: 'Valid 7 days', p: 800 }, screen: 'pay' }),
+      buyAirtime: () => this.setState({ service: 'airtime', screen: 'recipient', forSelf: true }),
+      buyData: () => this.setState({ service: 'data', screen: 'recipient', forSelf: true }),
+      goHome: () => this.go('home'), goHistory: () => this.go('history'),
+      goRecipient: () => this.go('recipient'), goPacks: () => this.go('packs'),
+      payBack: () => this.go(s.service === 'esim' ? 'esimPlans' : 'packs'),
+      recents: this.recentsData.map(r => ({
+        ...r,
+        onRepeat: () => this.setState({ forSelf: false, phone: r.phone, carrier: r.carrier, service: 'data', screen: 'packs' })
+      })),
+      homeActivity: s.history.slice(0, 2),
+      history: s.history,
+      whoOpts: toggle(
+        [{ label: 'FOR MYSELF', val: true }, { label: 'SOMEONE ELSE', val: false }],
+        s.forSelf,
+        v => this.setState({ forSelf: v, phone: v ? '07 09 55 12 34' : '', carrier: v ? 'Orange' : s.carrier })
+      ),
+      serviceOpts: toggle(
+        [{ label: 'AIRTIME', val: 'airtime' }, { label: 'DATA', val: 'data' }],
+        s.service, v => this.setState({ service: v })
+      ),
+      phone: s.phone,
+      onPhone: e => {
+        const phone = e.target.value;
+        const det = this.detect(phone);
+        this.setState(det ? { phone, carrier: det } : { phone });
+      },
+      detectNote: detected ? '· detected from number' : '',
+      phoneInvalid: digits.length < 8,
+      carrierCells: this.carriers.map(c => ({
+        name: c.name, sub: 'PREFIX ' + c.prefix,
+        onClick: () => this.setState({ carrier: c.name }),
+        style: 'padding:12px 8px;text-align:center;cursor:pointer;border:1px solid ' +
+          (c.name === s.carrier ? sel + ';background:#fff2ef' : div)
+      })),
+      carrier: s.carrier,
+      packsTitle: s.service === 'airtime' ? 'Airtime' : 'Data packs',
+      isAirtimeService: s.service === 'airtime',
+      customAmt: s.customAmt,
+      onCustomAmt: e => {
+        const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
+        this.setState({ customAmt: digits ? Number(digits).toLocaleString('fr-FR').replace(/\u202f|,/g, ' ') : '' });
+      },
+      customInvalid: Number(s.customAmt.replace(/\D/g, '')) < 100,
+      customNote: 'Any amount from 100 to 500 000 FCFA' + (Number(s.customAmt.replace(/\D/g, '')) >= 1000 ? ' · earns +5% bonus' : ''),
+      buyCustom: () => {
+        const amt = Number(s.customAmt.replace(/\D/g, ''));
+        if (amt < 100) return;
+        const fmtd = amt.toLocaleString('fr-FR').replace(/\u202f|,/g, ' ');
+        this.setState({ pack: { n: fmtd + ' FCFA', v: 'Airtime credit', p: amt, b: amt >= 1000 ? '+5% BONUS' : null }, screen: 'pay' });
+      },
+      packRows: packs.map(p => ({
+        n: p.n, v: p.v, b: showBonuses ? (p.b || null) : null, priceFmt: this.fmt(p.p),
+        onClick: () => this.setState({ pack: p, screen: 'pay' })
+      })),
+      summaryTo: s.service === 'esim' ? 'New eSIM profile' : (s.forSelf ? 'My number · ' : '') + (s.phone || '—'),
+      summaryPack: s.pack ? (s.pack.n + (s.service === 'airtime' ? ' airtime' : '')) : '—',
+      totalFmt: s.pack ? this.fmt(s.pack.p) : '—',
+      earnPts: pts,
+      payOpts: [
+        { id: 'momo', name: momoName, sub: 'Charged to ' + (s.phone || 'your number') },
+        { id: 'card', name: 'Card', sub: 'Visa •••• 4921' }
+      ].map(m => ({
+        ...m,
+        onClick: () => this.setState({ pay: m.id, ussdStep: false }),
+        style: payBase + (s.pay === m.id ? sel + ';background:#fff2ef' : div),
+        dotBg: s.pay === m.id ? sel : 'transparent',
+        dotShadow: s.pay === m.id ? 'inset 0 0 0 2.5px #fff2ef' : 'none'
+      })),
+      pay: () => this.doPay(),
+      paying: s.paying,
+      payLabel: s.paying ? 'PROCESSING…' : (s.pay === 'momo' ? 'CONFIRM ' : 'PAY ') + (s.pack ? this.fmt(s.pack.p) : ''),
+      payAnim: s.paying ? 'pulse 1s infinite' : 'none',
+      showUssd: s.pay === 'momo' && s.ussdStep,
+      showPayBtn: !(s.pay === 'momo' && s.ussdStep),
+      momoName,
+      ussdCode: this.ussdFor(s.carrier, s.pack),
+      copyLabel: s.copied ? 'COPIED ✓' : 'COPY',
+      copyUssd: () => {
+        const code = this.ussdFor(s.carrier, s.pack);
+        if (navigator.clipboard) navigator.clipboard.writeText(code).catch(() => {});
+        this.setState({ copied: true });
+        setTimeout(() => this.setState({ copied: false }), 2000);
+      },
+      dialUssd: () => {
+        window.open('tel:' + encodeURIComponent(this.ussdFor(s.carrier, s.pack)), '_self');
+        this.finishPay();
+      },
+      dialLabel: s.paying ? 'WAITING FOR APPROVAL…' : 'DIAL CODE →',
+      ref: 'TP-260808-' + String(1000 + (s.history.length * 137) % 9000),
+      redeems: redeemsData.map(r => ({
+        ...r, disabled: s.points < r.cost,
+        onRedeem: () => {
+          if (s.points < r.cost) return;
+          this.setState({
+            points: s.points - r.cost,
+            history: [{ desc: r.name + ' · reward', meta: 'AUG 08 · Redeemed with points', amount: '−' + r.cost + ' pts', status: 'DELIVERED' }, ...s.history]
+          });
+        }
+      })),
+      redeemNote: 'Cashback bonuses on packs are credited instantly as points.',
+      navItems: [
+        { label: 'HOME', val: 'home' }, { label: 'HISTORY', val: 'history' }, { label: 'REWARDS', val: 'rewards' }, { label: 'PROFILE', val: 'profile' }
+      ].map(n => ({
+        label: n.label, onClick: () => this.go(n.val),
+        style: 'padding:14px 0 10px;text-align:center;cursor:pointer;font-size:10px;letter-spacing:.12em;font-weight:800;' +
+          (s.screen === n.val ? 'color:#ec3013;box-shadow:inset 0 3px 0 #ec3013' : 'color:rgba(32,30,29,.5)')
+      }))
+    };
+  }
+  componentDidMount() {
+    const st = this.props.startTab;
+    if (st && st !== 'home') this.setState({ screen: st });
+  }
+}
+</script>
+</body>
+</html>
