@@ -11,6 +11,7 @@
     "admin:dev": "pnpm --filter @topup/admin dev",
     "admin:build": "pnpm --filter @topup/admin build",
     "worker:dev": "pnpm --filter @topup/worker dev",
+    "worker:build": "pnpm --filter @topup/worker build",
     "worker:deploy": "pnpm --filter @topup/worker deploy",
     "typecheck": "pnpm -r --if-present typecheck"
   },

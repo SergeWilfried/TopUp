@@ -195,3 +195,18 @@ a:hover { color: var(--color-accent-700); }
   font-family: var(--font-heading); font-size: 28px; letter-spacing: 12px;
   text-align: center; padding: 12px;
 }
+
+/* ── credential reveal ───────────────────────────────────────────────────── */
+.code-block {
+  margin: 0;
+  padding: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  /* A 64-character token must not push the panel sideways. */
+  overflow-x: auto;
+  white-space: pre;
+  user-select: all;
+}

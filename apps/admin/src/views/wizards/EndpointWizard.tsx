@@ -27,8 +27,37 @@ export default function EndpointWizard({
   const codeOk = /^[A-Z]{2}$/.test(code.toUpperCase()) && !codeTaken;
   const hostOk = HOST_RE.test(host.trim().toLowerCase());
   const apiUrlOk = /^https?:\/\/[^\s]+$/.test(apiUrl.trim());
-  // Short tokens are worth rejecting here rather than after a round trip.
-  const tokenOk = agentToken.trim().length >= 16;
+
+  // The token is derived from the signing key, not stored, so this panel can be
+  // reached again later from the endpoint row rather than being a last chance.
+  if (issued) {
+    return (
+      <div className="panel">
+        <div className="body">
+          <div className="kicker">Endpoint created</div>
+          <h2 className="title">Install the agent on {host.trim().toLowerCase()}</h2>
+          <p className="note" style={{ margin: '8px 0 16px' }}>
+            Run this on the box. The token is unique to {code.toUpperCase()} — no other endpoint
+            accepts it, and it is not kept in the database.
+          </p>
+          <pre className="code-block">
+            {`AGENT_TOKEN=${issued} \\\n  API_DOMAIN=${host.trim().toLowerCase()} \\\n  bash install.sh`}
+          </pre>
+          <button
+            className="btn btn-primary"
+            type="button"
+            style={{ marginTop: 16 }}
+            onClick={() => navigator.clipboard?.writeText(issued)}
+          >
+            COPY TOKEN
+          </button>
+          <button className="btn btn-ghost" type="button" style={{ marginTop: 8 }} onClick={onCreated}>
+            DONE →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Wizard
@@ -40,14 +69,14 @@ export default function EndpointWizard({
         setSaving(true);
         setError(null);
         try {
-          await apiSend('POST', '/admin/endpoints', {
+          const created = await apiSend<{ agentToken: string }>('POST', '/admin/endpoints', {
             name: name.trim(),
             code: code.toUpperCase(),
             host: host.trim().toLowerCase(),
             apiUrl: apiUrl.trim(),
-            agentToken: agentToken.trim(),
           });
-          onCreated();
+          setIssued(created.agentToken);
+          setSaving(false);
         } catch (e) {
           setError(e instanceof ApiError ? `${e.code}${e.field ? ` (${e.field})` : ''}` : 'network error');
           setSaving(false);
@@ -82,7 +111,7 @@ export default function EndpointWizard({
         },
         {
           label: 'Host',
-          valid: hostOk && apiUrlOk && tokenOk,
+          valid: hostOk && apiUrlOk,
           content: (
             <>
               <Field
@@ -119,26 +148,10 @@ export default function EndpointWizard({
                   spellCheck={false}
                 />
               </Field>
-              <Field
-                label="Agent token"
-                hint={
-                  agentToken && !tokenOk
-                    ? 'At least 16 characters.'
-                    : 'Unique to this server — a shared token would let one compromised box control them all.'
-                }
-              >
-                <input
-                  className="input"
-                  type="password"
-                  value={agentToken}
-                  onChange={(e) => setAgentToken(e.target.value)}
-                  placeholder="••••••••••••••••"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                />
-              </Field>
               <p className="note">
-                Existing subscribers do not get this automatically — they install it from the app when they want it.
+                The agent token is derived from the signing key once this is saved — you will be
+                shown the install command next. Existing subscribers do not get this endpoint
+                automatically; they install it from the app when they want it.
               </p>
             </>
           ),
@@ -154,7 +167,7 @@ export default function EndpointWizard({
                 ['Code', code.toUpperCase() || '—'],
                 ['Endpoint', host ? `${host.trim().toLowerCase()}:51820` : '—'],
                 ['Agent', apiUrl || '—'],
-                ['Token', agentToken ? `${agentToken.trim().length} characters` : '—'],
+                ['Token', 'Derived on save'],
                 ]}
               />
             </>
