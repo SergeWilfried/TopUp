@@ -4,6 +4,7 @@ import { View, Text, Pressable, StyleSheet, TextInput, Modal, ScrollView } from 
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, S, F, fmt, flagFor, toE164, PAYABLE_COUNTRIES } from '@topup/core';
+import { NoPacks } from './illustrations';
 
 export const Kicker = ({ children, light }) => (
   <Text style={[st.kicker, light && { color: 'rgba(243,242,242,0.85)' }]}>{children}</Text>
@@ -41,7 +42,19 @@ export const BackHeader = ({ onBack, label }) => (
 
 // Two-up card grid for bundles. Each card carries its own frame and the cards
 // sit apart, so a tap target reads as one object.
-export const PackGrid = ({ items, onSelect }) => {
+export const PackGrid = ({ items, onSelect, loading, art, title, body }) => {
+  // Handled here rather than at each call site: every grid in the app needs the
+  // same treatment, and an empty catalogue is the current production state.
+  if (!items.length) {
+    return (
+      <EmptyState
+        art={art ?? NoPacks}
+        loading={loading}
+        title={title ?? ''}
+        body={body}
+      />
+    );
+  }
   return (
     <View style={st.grid}>
       {items.map((p) => (
@@ -153,6 +166,32 @@ export const PhoneInput = ({ value, onChangeText, country, onCountryChange, plac
   );
 };
 
+/**
+ * Empty state: an illustration, a line saying what is true, and a way out.
+ *
+ * `loading` is a separate prop rather than a caller-side branch because the two
+ * were previously indistinguishable — a catalogue still in flight and a
+ * catalogue with nothing in it both rendered as blank space, so a slow network
+ * looked exactly like an empty shop. A spinner is deliberately not used for
+ * loading either; the illustration stays and only the caption changes, so the
+ * layout does not jump when data arrives.
+ */
+export const EmptyState = ({ art: Art, title, body, cta, onCta, loading }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={st.empty}>
+      <View style={{ opacity: loading ? 0.35 : 1 }}>
+        <Art size={104} />
+      </View>
+      <Text style={st.emptyTitle}>{loading ? t('common.loading') : title}</Text>
+      {!loading && body ? <Text style={st.emptyBody}>{body}</Text> : null}
+      {!loading && cta && onCta ? (
+        <Btn label={cta} onPress={onCta} style={{ marginTop: 4, alignSelf: 'stretch' }} />
+      ) : null}
+    </View>
+  );
+};
+
 export const SummaryRow = ({ k, v, bold }) => (
   <View style={st.sumRow}>
     <Text style={[st.sumKey, bold && st.sumBold]}>{k}</Text>
@@ -218,6 +257,20 @@ export const st = StyleSheet.create({
   fieldLabel: { fontFamily: F.body, fontSize: 12, color: C.muted70, marginBottom: 6 },
   // letterSpacing must be explicit: without it iOS renders the placeholder
   // massively tracked out when a custom font is set.
+  // Generous vertical room: an empty state is the whole screen, not a notice.
+  // flexGrow lets a full-screen empty state claim the leftover height so it
+  // centres in the viewport; inside a normal scroll it simply sizes to content.
+  // The host ScrollView needs contentContainerStyle={{ flexGrow: 1 }} for it.
+  empty: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 44,
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  emptyTitle: { fontFamily: F.heading, fontSize: 20, color: C.text, textAlign: 'center', letterSpacing: -0.3 },
+  emptyBody: { fontFamily: F.body, fontSize: 13, lineHeight: 19, color: C.muted, textAlign: 'center' },
   input: { minHeight: 48, backgroundColor: C.surface, borderWidth: 1, borderColor: C.divider, paddingHorizontal: 12, fontFamily: F.semi, fontSize: 16, letterSpacing: 0, color: C.text },
   // Hairline rule between the code and the number, matching the pack grid's
   // internal divisions rather than boxing the two controls separately.

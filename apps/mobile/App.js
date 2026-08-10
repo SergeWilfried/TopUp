@@ -30,7 +30,8 @@ import {
   paymentMethods,
 } from './api';
 import { detectCountry, deviceCountry, formatMoney, methodsFor } from './payment';
-import { Btn, BackHeader, Kicker, Tag, PackGrid, PhoneInput, SummaryRow, Toggle2, TabBar, Brand, st } from './ui';
+import { Btn, BackHeader, EmptyState, Kicker, Tag, PackGrid, PhoneInput, SummaryRow, Toggle2, TabBar, Brand, st } from './ui';
+import { NoEsim, NoLocations, NoResults, Offline } from './illustrations';
 import Onboarding from './screens/Onboarding';
 import HomeScreen from './screens/HomeScreen';
 import HistoryScreen from './screens/HistoryScreen';
@@ -120,11 +121,26 @@ function TopUp() {
   const [recoverFrom, setRecoverFrom] = useState('vpnPlans'); // where the recovery page returns to
   // Server-owned data. Null until loaded so screens can tell "empty" from "not yet".
   const [cat, setCat] = useState(null); // /catalogue
+  // Distinct from `cat === null`: that is "not yet", this is "asked and failed".
+  const [catFailed, setCatFailed] = useState(false);
   const [locations, setLocations] = useState([]); // /servers
   const [esimPlanList, setEsimPlanList] = useState([]);
   const [payError, setPayError] = useState(null);
   const [order, setOrder] = useState(null); // in-flight purchase
   const [quote, setQuote] = useState(null); // what this market is actually charged
+
+  const reloadCatalogue = React.useCallback(async () => {
+    setCatFailed(false);
+    setCat(null);
+    const lang = i18n.language?.slice(0, 2) || 'en';
+    const [data, servers] = await Promise.all([
+      fetchCatalogue(lang).catch(() => null),
+      vpnServers().catch(() => null),
+    ]);
+    if (data) setCat(data);
+    else setCatFailed(true);
+    if (servers) setLocations(servers.servers ?? []);
+  }, [i18n.language]);
 
   /**
    * The country of the number being signed in with, and therefore of the wallet
@@ -219,6 +235,7 @@ function TopUp() {
         // Corrupt record — start clean rather than block launch.
       }
       if (catalogueData) setCat(catalogueData);
+      else setCatFailed(true);
       if (servers) setLocations(servers.servers ?? []);
 
       // A stored session skips sign-in on relaunch, but only if it still works:
@@ -524,16 +541,18 @@ function TopUp() {
         />
       )}
 
-      {screen === 'history' && <HistoryScreen history={history} />}
+      {screen === 'history' && (
+        <HistoryScreen history={history} onBuy={() => goBuy('data')} />
+      )}
 
       {screen === 'rewards' && <RewardsScreen points={points} onRedeem={(cost) => setPoints((p) => p - cost)} />}
 
       {screen === 'profile' && (
         <ProfileScreen
           carrier={carrier}
-          phone={phone}
+          phone={myNumber || phone}
+          country={country}
           esims={esims}
-          momoName={momoName}
           vpn={vpn}
           onEsims={() => setScreen('esim')}
           onVpn={() => setScreen('vpn')}
@@ -597,7 +616,16 @@ function TopUp() {
               <Tag kind="neutral">{carrier}</Tag>
             </View>
             <Toggle2 opts={[{ label: t('packs.airtimeToggle'), val: 'airtime' }, { label: t('packs.dataToggle'), val: 'data' }]} value={service} onChange={setService} />
-            <PackGrid items={packs} onSelect={openPack} />
+            <PackGrid
+              items={packs}
+              onSelect={openPack}
+              loading={cat === null && !catFailed}
+              art={catFailed ? Offline : undefined}
+              title={catFailed ? t('empty.offlineTitle') : t('empty.packsTitle')}
+              body={catFailed ? t('empty.offlineBody') : t('empty.packsBody')}
+              cta={catFailed ? t('empty.retry') : null}
+              onCta={catFailed ? reloadCatalogue : null}
+            />
             {service === 'airtime' && (
               <Pressable
                 onPress={() => setScreen('amount')}
@@ -866,6 +894,15 @@ function TopUp() {
             <Btn label={t('esim.newCta')} onPress={() => { setCountrySearch(''); setScreen('esimCountry'); }} style={{ minHeight: 36 }} />
           </View>
           <View style={{ padding: 20, gap: 12 }}>
+            {esims.length === 0 ? (
+              <EmptyState
+                art={NoEsim}
+                title={t('empty.esimTitle')}
+                body={t('empty.esimBody')}
+                cta={t('empty.esimCta')}
+                onCta={() => { setCountrySearch(''); setScreen('esimCountry'); }}
+              />
+            ) : null}
             {esims.map((e) => (
               <View key={e.id} style={{ borderWidth: 2, borderColor: C.text, padding: 14, gap: 10 }}>
                 <View style={st.rowBetween}>
@@ -899,6 +936,24 @@ function TopUp() {
             <Text style={st.h2}>{t('esim.destinationTitle')}</Text>
             <Text style={[st.subText, { marginBottom: 14 }]}>{t('esim.destinationSub')}</Text>
             <TextInput style={[st.input, { marginBottom: 14 }]} value={countrySearch} onChangeText={setCountrySearch} placeholder={t('esim.searchPlaceholder')} />
+            {(() => {
+              const shown = (cat?.esimDestinations ?? []).filter((c) =>
+                c.name.toLowerCase().includes(countrySearch.trim().toLowerCase()),
+              );
+              if (shown.length) return null;
+              // A search that matches nothing is a different problem from a
+              // catalogue that has nothing, and says so.
+              return countrySearch.trim() ? (
+                <EmptyState art={NoResults} title={t('empty.searchTitle')} body={t('empty.searchBody')} />
+              ) : (
+                <EmptyState
+                  art={NoLocations}
+                  loading={cat === null}
+                  title={t('empty.destinationsTitle')}
+                  body={t('empty.destinationsBody')}
+                />
+              );
+            })()}
             <View style={{ borderTopWidth: 2, borderColor: C.divider }}>
               {(cat?.esimDestinations ?? []).filter((c) => c.name.toLowerCase().includes(countrySearch.trim().toLowerCase())).map((c) => (
                 <Pressable
@@ -946,6 +1001,9 @@ function TopUp() {
             <PackGrid
               items={esimPlanList}
               onSelect={(p) => { setService('esim'); setCarrier(p.carrier); openPack(p); }}
+              loading={esimPlanList.length === 0 && cat !== null}
+              title={t('empty.packsTitle')}
+              body={t('empty.packsBody')}
             />
           </View>
         </ScrollView>

@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { C, F, flagFor } from '@topup/core';
-import { BackHeader, Kicker, Tag, st } from '../ui';
+import { BackHeader, EmptyState, Kicker, Tag, st } from '../ui';
+import { NoLocations } from '../illustrations';
 
 // Step 01 of setup. One WireGuard tunnel is one server, so the customer picks a
 // location first and installs that config — then comes back for the next one.
@@ -39,6 +40,10 @@ export default function VpnLocationsScreen({
           {t('vpn.locBody')}
         </Text>
       </View>
+
+      {locations.length === 0 ? (
+        <EmptyState art={NoLocations} title={t('empty.locationsTitle')} body={t('empty.locationsBody')} />
+      ) : null}
 
       <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
         <View style={{ borderTopWidth: 2, borderColor: C.divider }}>

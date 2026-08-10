@@ -1,12 +1,16 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { C, F, fmtDate } from '@topup/core';
+import { C, F, fmtDate, flagFor, toE164 } from '@topup/core';
+import { methodsFor } from '../payment';
 import { LANGS } from '../i18n';
 import { TabHeader, st } from '../ui';
 
-export default function ProfileScreen({ carrier, phone, esims, momoName, vpn, onEsims, onVpn, onLanguage, onSignOut }) {
+export default function ProfileScreen({ carrier, phone, country, esims, vpn, onEsims, onVpn, onLanguage, onSignOut }) {
   const { t, i18n } = useTranslation();
+  const methods = methodsFor(country)
+    .methods.map((m) => m.title)
+    .join(' · ');
 
   const rows = [
     {
@@ -21,7 +25,13 @@ export default function ProfileScreen({ carrier, phone, esims, momoName, vpn, on
         : t('profile.vpnInactive'),
       go: onVpn,
     },
-    { name: t('profile.payment'), sub: t('profile.paymentSub', { provider: momoName }) },
+    {
+      name: t('profile.payment'),
+      // The rails this market can actually be charged on. It previously read
+      // "Visa •••• 4921" for everyone — an invented card number on an account
+      // that has never stored a payment method.
+      sub: methods.length ? t('profile.paymentSub', { methods }) : t('profile.paymentNone'),
+    },
     { name: t('profile.notifications'), sub: t('profile.notificationsSub') },
     {
       name: t('profile.language'),
@@ -37,12 +47,20 @@ export default function ProfileScreen({ carrier, phone, esims, momoName, vpn, on
       <TabHeader title={t('profile.title')} />
 
       <View style={{ padding: 20, flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+        {/* The account has a number, not a name — "Kouassi A." and its initials
+            were comp fixtures shown to every user. The flag is something we
+            actually know. */}
         <View style={{ width: 52, height: 52, borderWidth: 2, borderColor: C.text, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontFamily: F.heading, fontSize: 18, color: C.text }}>KA</Text>
+          <Text style={{ fontSize: 24 }}>{flagFor(country) ?? '☎'}</Text>
         </View>
         <View>
-          <Text style={{ fontFamily: F.heading, fontSize: 18, color: C.text }}>Kouassi A.</Text>
-          <Text style={st.subText}>{carrier} · {phone}</Text>
+          {/* Signed out, there is no number to show — an empty heading looked
+              like a rendering fault. */}
+          <Text style={{ fontFamily: F.heading, fontSize: 18, color: C.text }}>
+            {toE164(phone, country) ?? phone ?? ''}
+            {!phone ? t('profile.signedOut') : ''}
+          </Text>
+          <Text style={st.subText}>{phone ? carrier : t('profile.signedOutSub')}</Text>
         </View>
       </View>
 

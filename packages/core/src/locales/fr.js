@@ -1,5 +1,6 @@
 export default {
   common: {
+    loading: 'Chargement…',
     orderStatus: { pending: 'EN ATTENTE', paid: 'PAYÉ', delivering: 'ENVOI', delivered: 'LIVRÉ', delivery_failed: 'NON LIVRÉ', delivery_unknown: 'VÉRIFICATION', failed: 'ÉCHOUÉ', refunded: 'REMBOURSÉ' },
     back: '←',
     continue: 'CONTINUER →',
@@ -32,6 +33,26 @@ export default {
     GB: 'Royaume-Uni',
   },
 
+  empty: {
+    historyTitle: 'Aucun achat pour l’instant',
+    historyBody: 'Le crédit, les forfaits et les eSIM que vous achetez apparaîtront ici avec leur statut de livraison.',
+    historyCta: 'ACHETER DU CRÉDIT →',
+    packsTitle: 'Rien en vente ici pour l’instant',
+    packsBody: 'Aucun forfait disponible sur ce réseau actuellement. Essayez un autre réseau ou revenez plus tard.',
+    esimTitle: 'Aucun profil eSIM',
+    esimBody: 'Achetez une eSIM de voyage et elle s’installe directement sur ce téléphone — sans boutique, sans carte SIM.',
+    esimCta: 'VOIR LES DESTINATIONS →',
+    destinationsTitle: 'Aucune destination disponible',
+    destinationsBody: 'Impossible de charger les pays couverts. Vérifiez votre connexion et réessayez.',
+    locationsTitle: 'Aucun lieu disponible',
+    locationsBody: 'Votre abonnement est actif, mais aucun serveur n’est disponible à installer pour le moment.',
+    searchTitle: 'Aucun résultat',
+    searchBody: 'Rien ne correspond à cette recherche. Essayez un mot plus court.',
+    offlineTitle: 'TOPUP est injoignable',
+    offlineBody: 'Vérifiez votre connexion et réessayez.',
+    retry: 'RÉESSAYER',
+  },
+
   nav: { home: 'ACCUEIL', history: 'HISTORIQUE', rewards: 'POINTS', profile: 'PROFIL' },
 
   onboarding: {
@@ -49,7 +70,7 @@ export default {
   },
 
   welcome: {
-    poster: 'Bonjour',
+    poster: 'Crédit, &\ninternet.\nEn un instant.',
     trust: 'Orange · MTN · Moov — payez par mobile money ou carte. Sans frais de compte.',
     cta: 'COMMENCER →',
     recover: 'RÉCUPÉRER MES CONFIGS VPN',
@@ -84,7 +105,7 @@ export default {
 
   home: {
     quickBuy: 'Achat rapide',
-    title: 'Crédit & internet,\nen un instant.',
+    title: 'Bonjour',
     airtime: 'CRÉDIT',
     data: 'INTERNET',
     dealKicker: 'Offre du jour · Aujourd’hui seulement',
@@ -211,6 +232,8 @@ export default {
   },
 
   profile: {
+    signedOut: 'Non connecté',
+    signedOutSub: 'Connectez-vous pour voir votre compte',
     title: 'Profil',
     language: 'Langue',
     esims: 'Mes eSIM',
@@ -219,7 +242,8 @@ export default {
     vpnActive: '{{plan}} · renouvelé le {{date}}',
     vpnInactive: 'Inactif · dès 3 000 FCFA',
     payment: 'Moyens de paiement',
-    paymentSub: 'Visa •••• 4921 · {{provider}}',
+    paymentSub: '{{methods}}',
+    paymentNone: 'Aucun moyen de paiement disponible ici',
     notifications: 'Notifications',
     notificationsSub: 'Offres, accusés de livraison',
     help: 'Aide & support',

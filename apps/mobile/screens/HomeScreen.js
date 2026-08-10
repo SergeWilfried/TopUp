@@ -2,9 +2,10 @@ import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { C, F, fmt, fmtN } from '@topup/core';
 import { useTranslation } from 'react-i18next';
-import { Brand, Kicker, Tag, st } from '../ui';
+import { Brand, EmptyState, Kicker, Tag, st } from '../ui';
+import { NoHistory } from '../illustrations';
 
-export default function HomeScreen({ points, history, deal, onBuy, onDailyDeal, onVpn, hasVpn }) {
+export default function HomeScreen({ points, history, deal, loading, onBuy, onDailyDeal, onVpn, hasVpn }) {
   const { t } = useTranslation();
   const TILES = [
     { k: '₣', l: t('home.airtime'), svc: 'airtime' },
@@ -86,6 +87,11 @@ export default function HomeScreen({ points, history, deal, onBuy, onDailyDeal, 
 
       <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
         <View style={st.sectionRule}><Text style={st.sectionLabel}>{t('home.activity')}</Text></View>
+        {/* Compact here — the home screen already offers the ways out, so this
+            only needs to say why the list is blank. */}
+        {history.length === 0 ? (
+          <EmptyState art={NoHistory} loading={loading} title={t('empty.historyTitle')} />
+        ) : null}
         {history.slice(0, 3).map((h, i) => (
           <View key={i} style={st.listRow}>
             <View style={{ flex: 1 }}>

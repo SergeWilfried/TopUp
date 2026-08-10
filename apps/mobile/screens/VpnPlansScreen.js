@@ -24,15 +24,24 @@ export default function VpnPlansScreen({ plans = [], locations = [], onBack, onS
       </View>
 
       <View style={{ padding: 20, gap: 16 }}>
-        <PackGrid items={plans} onSelect={onSelect} />
+        <PackGrid
+          items={plans}
+          onSelect={onSelect}
+          title={t('empty.packsTitle')}
+          body={t('empty.packsBody')}
+        />
 
-        <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 8 }}>
-          <Kicker>{t('vpn.locationsIncluded', { count: locations.length })}</Kicker>
-          <Text style={st.rowTitle}>{locations.map((l) => l.name).join(' · ')}</Text>
-          <Text style={st.subText}>
-            {t('vpn.locationsBody')}
-          </Text>
-        </View>
+        {/* Nothing to include yet — the card would otherwise read "0
+            destinations" above an empty line. */}
+        {locations.length > 0 ? (
+          <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 8 }}>
+            <Kicker>{t('vpn.locationsIncluded', { count: locations.length })}</Kicker>
+            <Text style={st.rowTitle}>{locations.map((l) => l.name).join(' · ')}</Text>
+            <Text style={st.subText}>
+              {t('vpn.locationsBody')}
+            </Text>
+          </View>
+        ) : null}
 
         <Btn variant="secondary" label={t('vpn.restoreCta')} onPress={onRestore} />
       </View>

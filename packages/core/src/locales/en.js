@@ -1,5 +1,6 @@
 export default {
   common: {
+    loading: 'Loading…',
     orderStatus: { pending: 'PENDING', paid: 'PAID', delivering: 'SENDING', delivered: 'DELIVERED', delivery_failed: 'NOT DELIVERED', delivery_unknown: 'CHECKING', failed: 'FAILED', refunded: 'REFUNDED' },
     back: '←',
     continue: 'CONTINUE →',
@@ -32,6 +33,26 @@ export default {
     GB: 'United Kingdom',
   },
 
+  empty: {
+    historyTitle: 'No purchases yet',
+    historyBody: 'Airtime, data and eSIMs you buy will be listed here with their delivery status.',
+    historyCta: 'BUY CREDIT →',
+    packsTitle: 'Nothing on sale here yet',
+    packsBody: 'This network has no packs available right now. Try another network, or check back shortly.',
+    esimTitle: 'No eSIM profiles',
+    esimBody: 'Buy a travel eSIM and it installs straight onto this phone — no shop, no plastic SIM.',
+    esimCta: 'BROWSE DESTINATIONS →',
+    destinationsTitle: 'No destinations available',
+    destinationsBody: 'We could not load the countries we cover. Check your connection and try again.',
+    locationsTitle: 'No locations yet',
+    locationsBody: 'Your subscription is active, but no servers are available to install right now.',
+    searchTitle: 'No match',
+    searchBody: 'Nothing here matches that search. Try a shorter word.',
+    offlineTitle: 'Cannot reach TOPUP',
+    offlineBody: 'Check your connection and try again.',
+    retry: 'TRY AGAIN',
+  },
+
   nav: { home: 'HOME', history: 'HISTORY', rewards: 'REWARDS', profile: 'PROFILE' },
 
   onboarding: {
@@ -49,7 +70,7 @@ export default {
   },
 
   welcome: {
-    poster: 'Hello',
+    poster: 'Airtime & data,\nin seconds.',
     trust: 'Orange · MTN · Moov — pay with mobile money or card. No account fees.',
     cta: 'GET STARTED →',
     recover: 'RECOVER MY VPN CONFIGS',
@@ -84,7 +105,7 @@ export default {
 
   home: {
     quickBuy: 'Quick buy',
-    title: 'Airtime & data,\nin seconds.',
+    title: 'Hello',
     airtime: 'AIRTIME',
     data: 'DATA',
     dealKicker: 'Daily deal · Today only',
@@ -211,6 +232,8 @@ export default {
   },
 
   profile: {
+    signedOut: 'Not signed in',
+    signedOutSub: 'Sign in to see your account',
     title: 'Profile',
     language: 'Language',
     esims: 'My eSIMs',
@@ -219,7 +242,8 @@ export default {
     vpnActive: '{{plan}} · renews {{date}}',
     vpnInactive: 'Not active · from 3 000 FCFA',
     payment: 'Payment methods',
-    paymentSub: 'Visa •••• 4921 · {{provider}}',
+    paymentSub: '{{methods}}',
+    paymentNone: 'No payment method available here yet',
     notifications: 'Notifications',
     notificationsSub: 'Deals, delivery receipts',
     help: 'Help & support',
