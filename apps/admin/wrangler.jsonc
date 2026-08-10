@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "topup-admin",
+  "compatibility_date": "2026-01-01",
+  "observability": { "enabled": true },
+  // Assets-only Worker: there is no `main`, so nothing runs on request — the
+  // console is a static bundle that talks to topup-api cross-origin.
+  //
+  // `single-page-application` is what makes deep links work: React Router owns
+  // /customers, /endpoints and the rest, but those paths are not files on disk,
+  // so a reload or a pasted link would otherwise 404 before the app boots.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
