@@ -113,7 +113,6 @@ export default {
     data: 'DATA',
     dealKicker: 'Daily deal · Today only',
     dealTitle: '{{name}} for {{price}}',
-    dealPack: '2 GB · Daily deal',
     vpnKicker: 'Premium · VPN',
     vpnTitle: 'A private line, anywhere',
     vpnSub: 'Connected in 2 minutes · from 3 000 FCFA',

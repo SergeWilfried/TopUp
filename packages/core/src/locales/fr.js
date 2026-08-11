@@ -113,7 +113,6 @@ export default {
     data: 'INTERNET',
     dealKicker: 'Offre du jour · Aujourd’hui seulement',
     dealTitle: '{{name}} pour {{price}}',
-    dealPack: '2 Go · Offre du jour',
     vpnKicker: 'Premium · VPN',
     vpnTitle: 'Une ligne privée, partout',
     vpnSub: 'Connecté en 2 minutes · dès 3 000 FCFA',

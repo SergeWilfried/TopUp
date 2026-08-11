@@ -421,7 +421,14 @@ function TopUp() {
       : networksFor(recipientCountry).map((name) => ({ name, prefix: null }));
 
   // The deal tile and the button under it must name the same catalogue line.
-  const deal = (cat?.data ?? []).find((d) => d.bonus) ?? cat?.data?.[0] ?? null;
+  //
+  // No fallback to the first product on purpose. Data rows are synced from the
+  // distributor, which has no notion of a bonus, so the find below matches
+  // nothing until someone deliberately marks a product — and the old
+  // `?? cat.data[0]` quietly turned that into the cheapest bundle in the
+  // catalogue, advertised as "Daily deal · Today only". Nothing on offer means
+  // no card, rather than promoting a row nobody chose.
+  const deal = (cat?.data ?? []).find((d) => d.bonus) ?? null;
 
   // Airtime and data are a separate SKU on every network, so the catalogue
   // carries one row per carrier. Showing them all put three "150 MB" tiles
