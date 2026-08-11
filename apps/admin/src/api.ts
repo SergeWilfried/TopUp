@@ -74,6 +74,8 @@ export const apiSend = async <T>(method: 'POST' | 'PATCH', path: string, body: u
 // ── row shapes returned by the worker ──────────────────────────────────────
 export type Stats = {
   revenue: number;
+  /** Service fees kept out of turnover — what the business actually earns. */
+  fees: number;
   revenue7: number;
   revenueDelta: number;
   orders: number;

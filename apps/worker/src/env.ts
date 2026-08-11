@@ -40,6 +40,10 @@ export type Env = {
    * A wallet with no code simply is not offered the dial rail.
    */
   MERCHANT_CODES?: string;
+  /** Service fee percent on airtime and data. Defaults to 2. */
+  SERVICE_FEE_PCT?: string;
+  /** '1' stands a fake distributor in until real credentials work. */
+  MOCK_DELIVERY?: string;
   /** Shared secret the collector device signs its reports with. */
   COLLECTOR_TOKEN?: string;
 

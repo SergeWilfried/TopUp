@@ -30,6 +30,8 @@ export default function Dashboard() {
             { label: 'Revenue · 7 days', value: fmt(s.revenue7), delta: s.revenueDelta, sub: 'vs previous 7' },
             { label: 'Orders · 7 days', value: fmtN(s.orders7), sub: `${fmtN(s.orders)} all time` },
             { label: 'Average order', value: fmt(s.avgOrder), sub: 'settled only' },
+            // Turnover is what customers spent; this is what we kept.
+            { label: 'Fees earned', value: fmt(s.fees), sub: 'all time' },
             { label: 'Failure rate', value: `${s.failureRate}%`, sub: `${s.pending} pending now` },
           ]}
         />

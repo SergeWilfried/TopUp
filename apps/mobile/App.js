@@ -820,6 +820,20 @@ function TopUp() {
               <SummaryRow k={t('pay.to')} v={isVpn ? t('pay.vpnSubscription') : service === 'esim' ? t('pay.newEsim') : (forSelf ? t('pay.myNumber') : '') + phone} />
               {!isVpn && <SummaryRow k={t('pay.network')} v={carrier} />}
               <SummaryRow k={t('pay.pack')} v={pack ? pack.n : '—'} />
+              {/* The fee is broken out rather than folded into the total. It is a
+                  small amount on a familiar face value, so a customer who sees
+                  1 020 F charged for a 1 000 F top-up with no explanation reads it
+                  as being shortchanged. Shown only when there is one — every
+                  zero-fee line would just be noise on eSIM and VPN. */}
+              {quote && quote.feeXof > 0 && (
+                <>
+                  <SummaryRow k={t('pay.subtotal')} v={formatMoney(quote.subtotal, quote.currency)} />
+                  <SummaryRow
+                    k={t('pay.fee', { pct: quote.feePct })}
+                    v={formatMoney(quote.fee, quote.currency)}
+                  />
+                </>
+              )}
               {/* The quote is what the provider will actually take. Falling back
                   to the XOF list price only while it loads. */}
               <SummaryRow

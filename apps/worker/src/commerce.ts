@@ -333,6 +333,11 @@ export async function commerceStats(env: Env) {
   const totals = await env.DB.prepare(
     `SELECT COUNT(*) AS orders,
             COALESCE(SUM(CASE WHEN status IN ${REVENUE_SQL} THEN amount ELSE 0 END), 0) AS revenue,
+            -- Turnover above is what customers spent; this is what we kept. On a
+            -- top-up the two are wildly different — a million francs of airtime
+            -- moved earns twenty thousand — so reporting only the former would
+            -- flatter the business into a number it never banked.
+            COALESCE(SUM(CASE WHEN status IN ${REVENUE_SQL} THEN fee ELSE 0 END), 0) AS fees,
             SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
             SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) AS refunded,
@@ -341,6 +346,7 @@ export async function commerceStats(env: Env) {
   ).first<{
     orders: number;
     revenue: number;
+    fees: number;
     delivered: number;
     pending: number;
     refunded: number;
@@ -382,6 +388,8 @@ export async function commerceStats(env: Env) {
 
   return {
     revenue: totals?.revenue ?? 0,
+    /** Service fees kept out of that turnover — the actual earnings line. */
+    fees: totals?.fees ?? 0,
     revenue7: rev7,
     revenueDelta: revPrev7 ? Math.round(((rev7 - revPrev7) / revPrev7) * 100) : 0,
     orders: totals?.orders ?? 0,

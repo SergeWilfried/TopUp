@@ -29,12 +29,22 @@ export type Quote = {
   label: string;
   country: string;
   currency: string;
-  /** Human amount in the billing currency, e.g. 9.15 EUR. */
+  /** Human amount in the billing currency, e.g. 9.15 EUR. Includes the fee. */
   amount: number;
   /** What the provider's API wants: cents, kobo, or whole francs. */
   minorAmount: number;
-  /** Always the catalogue figure, for reconciliation. */
+  /** Always the catalogue figure, for reconciliation. Excludes the fee. */
   amountXof: number;
+  /** Face value in the billing currency — `amount` less `fee`. */
+  subtotal: number;
+  /** Service fee in the billing currency, already included in `amount`. */
+  fee: number;
+  /** Service fee in XOF, already included in `amount`. Zero where none applies. */
+  feeXof: number;
+  /** The rate that produced `feeXof`, so the app can label it without hardcoding. */
+  feePct: number;
+  /** Face value plus fee, in XOF — what the customer is actually charged. */
+  chargedXof: number;
   rate: number;
 };
 
@@ -55,18 +65,59 @@ export async function loadRates(env: Env): Promise<Record<string, number>> {
   return rates;
 }
 
+/**
+ * Products that carry a service fee.
+ *
+ * Airtime and data only. A VPN or eSIM is our own product sold at our own
+ * price, so a separate "fee" line on top would be an invented charge; a top-up
+ * has a face value the customer recognises, and the fee is what we are paid for
+ * saving them the trip.
+ */
+const FEE_BEARING = new Set(['airtime', 'data']);
+
+/** Percent, from config so it can move without a deploy. Defaults to 2. */
+export const feePercent = (env: Env) => {
+  const raw = Number(env.SERVICE_FEE_PCT);
+  return Number.isFinite(raw) && raw >= 0 && raw <= 20 ? raw : 2;
+};
+
+/**
+ * The fee on a top-up, in whole francs.
+ *
+ * Charged on the face value, never on the converted amount: a Burkinabè and a
+ * French customer buying the same 1 000 F top-up should pay the same fee in
+ * real terms. Rounded up so it is never zero on a small bundle — 2% of 155 F
+ * rounds to 3, not to nothing.
+ */
+export function serviceFeeXof(env: Env, productType: string, faceXof: number): { xof: number; pct: number } {
+  if (!FEE_BEARING.has(productType)) return { xof: 0, pct: 0 };
+  const pct = feePercent(env);
+  return { xof: Math.ceil((faceXof * pct) / 100), pct };
+}
+
 export function quoteFor(
   amountXof: number,
   country: string,
   rates: Record<string, number>,
+  feeXof = 0,
+  feePct = 0,
 ): Quote | QuoteError {
   const route = routeForCountry(country);
   if (!route) return { error: 'country_unsupported', status: 422 };
 
-  const amount = convertFromXof(amountXof, route.currency, rates);
+  // The customer pays face value plus fee; the recipient receives face value.
+  const chargedXof = amountXof + feeXof;
+  const amount = convertFromXof(chargedXof, route.currency, rates);
   // Refusing is the only safe move: charging at a guessed rate loses money on
   // every sale, and charging XOF on a rail that rejects it fails anyway.
   if (amount === null) return { error: 'no_fx_rate', status: 503 };
+
+  // Derived by subtraction rather than converted on its own, so the breakdown
+  // always sums to the total charged. Converting each line separately leaves the
+  // two rounding remainders showing as a summary that does not add up — a penny
+  // of arithmetic the customer has every right to question.
+  const subtotal = convertFromXof(amountXof, route.currency, rates) ?? amount;
+  const fee = Math.round((amount - subtotal) * 100) / 100;
 
   return {
     provider: route.provider,
@@ -76,6 +127,11 @@ export function quoteFor(
     amount,
     minorAmount: toMinorUnits(amount, route.currency),
     amountXof,
+    subtotal,
+    fee,
+    feeXof,
+    feePct,
+    chargedXof,
     rate: rates[route.currency] ?? 1,
   };
 }

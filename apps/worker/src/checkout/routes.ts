@@ -4,7 +4,7 @@ import { translator } from '../i18n';
 import * as pawapay from './pawapay-api';
 import * as paystack from './paystack-api';
 import * as stripe from './stripe-api';
-import { isQuoteError, loadRates, quoteFor, type Quote } from './pricing';
+import { isQuoteError, loadRates, quoteFor, serviceFeeXof, type Quote } from './pricing';
 import { dialableCarriers, matchCollection, prepareDial } from './ussd';
 import { canDeliver, deliverOrder } from '../delivery';
 import { MOBILE_MONEY_CARRIERS, diallingCodeFor, iso3For, routeForCountry, toMinorUnits } from '@topup/core';
@@ -40,6 +40,7 @@ type ProductRow = {
   days: number | null;
   enabled: number;
   network: string | null;
+  bundle_id: string | null;
 };
 
 const PROVIDERS = ['pawapay', 'paystack', 'stripe'] as const;
@@ -113,11 +114,14 @@ checkout.get('/methods', async (c) => {
 
   let quote: Quote | null = null;
   if (productId) {
-    const product = await c.env.DB.prepare(`SELECT price FROM products WHERE id = ? AND enabled = 1`)
+    const product = await c.env.DB.prepare(`SELECT price, type FROM products WHERE id = ? AND enabled = 1`)
       .bind(productId)
-      .first<{ price: number }>();
+      .first<{ price: number; type: string }>();
     if (!product) return c.json({ error: 'unknown_product', field: 'productId' }, 404);
-    const q = quoteFor(product.price, country, rates);
+    // Quoted with the fee, so the figure shown before committing is the figure
+    // charged. Computing it in two places is how they drift apart.
+    const fee = serviceFeeXof(c.env, product.type, product.price);
+    const q = quoteFor(product.price, country, rates, fee.xof, fee.pct);
     if (isQuoteError(q)) return c.json({ error: q.error }, q.status as 422);
     quote = q;
   }
@@ -220,6 +224,7 @@ checkout.post('/', async (c) => {
       msisdn: recipientMsisdn || msisdn,
       country: recipientCountry,
       network: product.network,
+      bundleId: product.bundle_id,
     });
     if (!deliverable) {
       return c.json({ error: 'recipient_undeliverable', field: 'recipientMsisdn' }, 422);
@@ -230,7 +235,8 @@ checkout.post('/', async (c) => {
   if (provider !== 'pawapay' && !body.email) return c.json({ error: 'email_required', field: 'email' }, 400);
 
   const rates = await loadRates(c.env);
-  const quote = quoteFor(product.price, country, rates);
+  const fee = serviceFeeXof(c.env, product.type, product.price);
+  const quote = quoteFor(product.price, country, rates, fee.xof, fee.pct);
   if (isQuoteError(quote)) return c.json({ error: quote.error }, quote.status as 422);
 
   const t = translator('en');
@@ -250,8 +256,8 @@ checkout.post('/', async (c) => {
 
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO orders (id, customer_id, product, sku, detail, amount, status, created_at, recipient_msisdn, recipient_country)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      `INSERT INTO orders (id, customer_id, product, sku, detail, amount, fee, status, created_at, recipient_msisdn, recipient_country)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
     ).bind(
       orderId,
       customerId,
@@ -259,6 +265,7 @@ checkout.post('/', async (c) => {
       product.id,
       name,
       amount,
+      quote.feeXof,
       now(),
       recipientMsisdn ? normaliseMsisdn(recipientMsisdn, recipientCountry) : null,
       recipientCountry,

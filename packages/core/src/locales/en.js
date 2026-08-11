@@ -189,6 +189,8 @@ export default {
     to: 'To',
     network: 'Network',
     pack: 'Pack',
+    subtotal: 'Subtotal',
+    fee: 'Service fee ({{pct}}%)',
     total: 'Total',
     converted: 'Charged from',
     myNumber: 'My number · ',

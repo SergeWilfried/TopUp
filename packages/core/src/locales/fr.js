@@ -189,6 +189,8 @@ export default {
     to: 'Pour',
     network: 'Réseau',
     pack: 'Forfait',
+    subtotal: 'Sous-total',
+    fee: 'Frais de service ({{pct}} %)',
     total: 'Total',
     converted: 'Équivaut à',
     myNumber: 'Mon numéro · ',
