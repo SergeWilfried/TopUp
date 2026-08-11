@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS products (
   price        INTEGER NOT NULL,
   currency     TEXT NOT NULL DEFAULT 'XOF',
   days         INTEGER,
+  bundle_id    TEXT,
   enabled      INTEGER NOT NULL DEFAULT 1,
   sort_order   INTEGER NOT NULL DEFAULT 0,
   created_at   INTEGER NOT NULL

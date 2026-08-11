@@ -74,6 +74,8 @@ export type DeliveryRequest = {
   /** ISO-2 of the recipient's country, which decides the provider. */
   country: string;
   network: string | null;
+  /** Distributor's opaque id for a data bundle. Airtime has none. */
+  bundleId: string | null;
 };
 
 /**

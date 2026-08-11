@@ -359,6 +359,19 @@ admin.get('/endpoints/:code/token', async (c) => {
 });
 
 /**
+ * Pulls the distributor's live data bundles into the catalogue.
+ *
+ * Safe to run repeatedly: bundles are upserted by id and ones that vanish are
+ * disabled rather than deleted, so order history keeps resolving.
+ */
+admin.post('/bundles/sync', async (c) => {
+  const { syncDataBundles } = await import('./delivery/bundles');
+  const country = (c.req.query('country') ?? 'BF').toUpperCase();
+  const name = c.req.query('name') ?? 'Burkina Faso';
+  return c.json(await syncDataBundles(c.env, country, name));
+});
+
+/**
  * Remaining airtime float at the distributor, per country.
  *
  * Airtime distribution fails first by running out of money rather than by

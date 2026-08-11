@@ -21,7 +21,22 @@ import type { DeliveryOutcome, DeliveryProvider, DeliveryRequest } from './types
 
 const DEFAULT_BASE = 'https://airtime.lafricamobile.com';
 
-const base = (env: Env) => (env.LAFRICAMOBILE_BASE_URL ?? DEFAULT_BASE).replace(/\/+$/, '');
+/**
+ * The API root, or null when it is unusable.
+ *
+ * A misconfigured value used to reach `new URL()` outside any try/catch and
+ * take the whole request down with a 500 — a typo in an env var should degrade
+ * one provider, not break the endpoint.
+ */
+const base = (env: Env): string | null => {
+  const raw = (env.LAFRICAMOBILE_BASE_URL ?? DEFAULT_BASE).replace(/\/+$/, '');
+  try {
+    return new URL(raw).origin + new URL(raw).pathname.replace(/\/$/, '');
+  } catch {
+    console.error(`LAFRICAMOBILE_BASE_URL is not a valid URL: ${raw.slice(0, 12)}…`);
+    return null;
+  }
+};
 
 const configured = (env: Env) => Boolean(env.LAFRICAMOBILE_LOGIN && env.LAFRICAMOBILE_PASSWORD);
 
@@ -120,7 +135,9 @@ export type Balance = { country: string; balance: number };
 export async function checkBalance(env: Env): Promise<{ ok: true; balances: Balance[] } | { ok: false; error: string }> {
   if (!configured(env)) return { ok: false, error: 'not_configured' };
 
-  const url = new URL(`${base(env)}/credit`);
+  const root = base(env);
+  if (!root) return { ok: false, error: 'bad_base_url' };
+  const url = new URL(`${root}/credit`);
   url.searchParams.set('login', env.LAFRICAMOBILE_LOGIN!);
   url.searchParams.set('password', env.LAFRICAMOBILE_PASSWORD!);
 
@@ -147,6 +164,73 @@ export async function checkBalance(env: Env): Promise<{ ok: true; balances: Bala
   }
 }
 
+// ── catalogue ───────────────────────────────────────────────────────────────
+export type Bundle = {
+  bundleid: string;
+  amount: number;
+  data: string;
+  operator: string;
+  currency: string;
+};
+
+/**
+ * The data bundles an operator is actually selling right now.
+ *
+ * These are the product list, not a mirror of one. Operators add, reprice and
+ * retire bundles constantly, and each is bought by an opaque `bundleid` that no
+ * local catalogue could invent — so maintaining our own list of sizes was busy
+ * work that could only ever drift out of date.
+ */
+export async function fetchBundles(
+  env: Env,
+  operatorCode: string,
+): Promise<{ ok: true; bundles: Bundle[] } | { ok: false; error: string }> {
+  if (!configured(env)) return { ok: false, error: 'not_configured' };
+
+  const root = base(env);
+  if (!root) return { ok: false, error: 'bad_base_url' };
+  const url = new URL(`${root}/checkbundle`);
+  url.searchParams.set('operateur', operatorCode);
+  url.searchParams.set('login', env.LAFRICAMOBILE_LOGIN!);
+  url.searchParams.set('password', env.LAFRICAMOBILE_PASSWORD!);
+
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    const body = (await res.json().catch(() => null)) as unknown;
+
+    // An operator with nothing on sale answers with an error object rather than
+    // an empty array. That is a normal state, not a failure.
+    if (!Array.isArray(body)) {
+      const msg = (body as { message?: string } | null)?.message ?? 'malformed_response';
+      return /no data bundles/i.test(msg) ? { ok: true, bundles: [] } : { ok: false, error: msg };
+    }
+
+    return {
+      ok: true,
+      bundles: (body as Bundle[]).filter((b) => b && b.bundleid && Number.isFinite(Number(b.amount))),
+    };
+  } catch (e) {
+    return { ok: false, error: `unreachable: ${(e as Error).message}` };
+  }
+}
+
+/**
+ * One entry per distinct operator, for syncing its bundles.
+ *
+ * The table carries aliases so a customer's chosen network resolves whatever we
+ * call it — Burkina's `Moov` and `Telmob` are one operator, `TELMOBBF`. Syncing
+ * per alias fetched the same bundles twice and relabelled them with whichever
+ * alias ran last, leaving products filed under a network the app never offers.
+ * First name wins, which is the one the catalogue sells under.
+ */
+export const operatorCodesFor = (country: string) => {
+  const byCode = new Map<string, string>();
+  for (const [network, code] of Object.entries(OPERATOR_CODES[country.toUpperCase()] ?? {})) {
+    if (!byCode.has(code)) byCode.set(code, network);
+  }
+  return [...byCode].map(([code, network]) => ({ network, code }));
+};
+
 // ── the provider ────────────────────────────────────────────────────────────
 type SendResponse = {
   gu_transaction_id: string;
@@ -168,10 +252,11 @@ export function lafricamobile(env: Env): DeliveryProvider {
 
     supports(req: DeliveryRequest) {
       if (!configured(env)) return false;
-      // Airtime and data bundles only. A data bundle additionally needs a
-      // `bundleid`, which we do not carry on products yet — so data is left to
-      // another provider rather than sent as if it were airtime.
-      if (req.product !== 'airtime') return false;
+      // A data bundle is bought by id, not by amount, so a data product with no
+      // `bundleid` cannot be sent — and must not be sent as airtime instead,
+      // which would credit the wrong thing for the right money.
+      if (req.product === 'data' && !req.bundleId) return false;
+      if (req.product !== 'airtime' && req.product !== 'data') return false;
       return Boolean(operatorCodeFor(req.country, req.network) && internationalDigits(req.msisdn, req.country));
     },
 
@@ -182,7 +267,7 @@ export function lafricamobile(env: Env): DeliveryProvider {
 
       let res: Response;
       try {
-        res = await fetch(`${base(env)}/airtime`, {
+        res = await fetch(`${base(env) ?? DEFAULT_BASE}/airtime`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -191,6 +276,7 @@ export function lafricamobile(env: Env): DeliveryProvider {
             montant: String(req.amount),
             telephone,
             operateur,
+            ...(req.bundleId ? { bundleid: req.bundleId } : {}),
             // Their callback is an acknowledgement, not evidence: the outcome is
             // always read back from /checkstatus, same rule as every other rail.
             ...(env.PUBLIC_BASE_URL ? { callback: `${env.PUBLIC_BASE_URL}/checkout/callback/lafricamobile` } : {}),
@@ -218,7 +304,7 @@ export function lafricamobile(env: Env): DeliveryProvider {
 
     /** Resolves `delivering` and `delivery_unknown` against the provider's own record. */
     async check(providerRef: string): Promise<DeliveryOutcome> {
-      const url = new URL(`${base(env)}/checkstatus`);
+      const url = new URL(`${base(env) ?? DEFAULT_BASE}/checkstatus`);
       url.searchParams.set('gu_transaction_id', providerRef);
       try {
         const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });

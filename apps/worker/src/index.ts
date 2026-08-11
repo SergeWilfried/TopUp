@@ -66,5 +66,12 @@ export default {
         console.error(`delivery reconciliation failed: ${(e as Error).message}`),
       ),
     );
+    // Operators reprice and retire bundles without notice, so the catalogue is
+    // refreshed from them rather than maintained by hand.
+    ctx.waitUntil(
+      import('./delivery/bundles')
+        .then(({ syncDataBundles }) => syncDataBundles(env, 'BF', 'Burkina Faso'))
+        .catch((e) => console.error(`bundle sync failed: ${(e as Error).message}`)),
+    );
   },
 };

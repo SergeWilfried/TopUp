@@ -7,6 +7,7 @@ import {
 
 export * from './types';
 import { lafricamobile } from './lafricamobile';
+import { mockEnabled, mockProvider } from './mock';
 export { checkBalance } from './lafricamobile';
 
 /**
@@ -33,6 +34,10 @@ export function registerProvider(provider: DeliveryProvider) {
  * idempotent by name so repeated calls cannot stack duplicates.
  */
 export function configureProviders(env: Env) {
+  // First match wins, so the mock has to precede the real one.
+  if (mockEnabled(env) && !providers.some((p) => p.name === 'mock')) {
+    providers.unshift(mockProvider(env));
+  }
   if (!providers.some((p) => p.name === 'lafricamobile')) {
     providers.push(lafricamobile(env));
   }
@@ -67,6 +72,7 @@ type OrderRow = {
   buyer_msisdn: string;
   buyer_country: string | null;
   network: string | null;
+  bundle_id: string | null;
 };
 
 /** Everything a provider needs, assembled from the order and its customer. */
@@ -74,7 +80,7 @@ async function loadRequest(env: Env, orderId: string): Promise<OrderRow | null> 
   return env.DB.prepare(
     `SELECT o.id, o.product, o.sku, o.amount, o.status,
             o.recipient_msisdn, o.recipient_country,
-            c.msisdn AS buyer_msisdn, o.recipient_country AS buyer_country, p.network
+            c.msisdn AS buyer_msisdn, o.recipient_country AS buyer_country, p.network, p.bundle_id
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      LEFT JOIN products p ON p.id = o.sku
@@ -117,6 +123,7 @@ export async function deliverOrder(env: Env, orderId: string): Promise<void> {
     // which is neither a code nor necessarily where the recipient is.
     country: (order.recipient_country ?? '').toUpperCase(),
     network: order.network,
+    bundleId: order.bundle_id,
   };
 
   const provider = providerFor(req);
