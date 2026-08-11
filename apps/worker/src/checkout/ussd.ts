@@ -1,4 +1,4 @@
-import { canonicalMsisdn, carrierAllowed, merchantUssdFor } from '@topup/core';
+import { canonicalMsisdn, carrierAllowed, dialSupported, merchantUssdFor } from '@topup/core';
 import { now, type Env } from '../env';
 
 /**
@@ -35,13 +35,11 @@ export function merchantCode(env: Env, country: string, carrier: string): string
 
 /** Wallets in this market that can be paid by dialling, with their codes. */
 export function dialableCarriers(env: Env, country: string, carriers: readonly string[]) {
+  // Availability, not instructions: this answers the payment-method list, where
+  // no amount exists yet. Building a string here would mean inventing one.
   return carriers
-    .map((carrier) => {
-      const code = merchantCode(env, country, carrier);
-      const ussd = code ? merchantUssdFor(country, carrier, code) : null;
-      return ussd ? { carrier, ussd } : null;
-    })
-    .filter((x): x is { carrier: string; ussd: string } => x !== null);
+    .filter((carrier) => dialSupported(country, carrier) && merchantCode(env, country, carrier))
+    .map((carrier) => ({ carrier }));
 }
 
 export type DialInstructions = { carrier: string; ussd: string; amount: number; currency: string };
@@ -60,7 +58,9 @@ export function prepareDial(
   const code = merchantCode(env, input.country, input.carrier);
   if (!code) return { ok: false, error: 'merchant_not_configured' };
 
-  const ussd = merchantUssdFor(input.country, input.carrier, code);
+  // The amount goes into the code itself, so the customer confirms a figure
+  // rather than keying one in.
+  const ussd = merchantUssdFor(input.country, input.carrier, code, input.amount);
   if (!ussd) return { ok: false, error: 'dial_unavailable' };
 
   return { ok: true, dial: { carrier: input.carrier, ussd, amount: input.amount, currency: input.currency } };

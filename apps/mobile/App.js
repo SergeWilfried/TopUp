@@ -913,7 +913,7 @@ function TopUp() {
                   />
                 </View>
                 <Text style={st.subText}>{t('pay.dialSim', { carrier: method?.carrier ?? '' })}</Text>
-                <Text style={st.subText}>{t('pay.dialAmount', { amount: fmt(order.amount) })}</Text>
+                <Text style={st.subText}>{t('pay.dialAmount')}</Text>
                 <Btn
                   label={t('pay.dialCta')}
                   onPress={() => Linking.openURL('tel:' + encodeURIComponent(order.ussd)).catch(() => {})}

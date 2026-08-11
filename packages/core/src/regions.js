@@ -247,14 +247,45 @@ export const canonicalMsisdn = (raw, country) => {
  */
 export const MOMO_MERCHANT_USSD = {
   BF: {
-    Orange: '*144*10*{merchant}#',
-    Moov: '*155*10*{merchant}#',
+    Orange: '*144*10*{merchant}*{amount}#',
+    Moov: '*155*10*{merchant}*{amount}#',
   },
 };
 
-export const merchantUssdFor = (country, carrier, merchantCode) => {
+/** Whether a market and wallet can be paid by dialling at all. */
+export const dialSupported = (country, carrier) =>
+  Boolean(MOMO_MERCHANT_USSD[String(country ?? '').toUpperCase()]?.[carrier]);
+
+/**
+ * Builds the string the customer dials.
+ *
+ * The amount is carried in the code rather than typed into the operator's menu.
+ * That is the whole point of the {amount} slot: a figure the customer keys in by
+ * hand is a figure that arrives wrong, and an inbound mobile-money credit that
+ * does not match any waiting order has to sit unallocated until a human sorts
+ * it out. Substituting it here removes that failure entirely.
+ *
+ * Returns null rather than a half-substituted string on any bad input. A USSD
+ * code containing a literal placeholder — or a decimal point, which these menus
+ * cannot carry — is one the customer simply cannot dial, so failing loudly at
+ * the source beats shipping something broken to a handset.
+ */
+export const merchantUssdFor = (country, carrier, merchantCode, amount) => {
   const tpl = MOMO_MERCHANT_USSD[String(country ?? '').toUpperCase()]?.[carrier];
-  return tpl && merchantCode ? tpl.replace('{merchant}', merchantCode) : null;
+  if (!tpl || !merchantCode) return null;
+
+  let out = tpl.replace('{merchant}', String(merchantCode));
+
+  if (out.includes('{amount}')) {
+    // These markets are all XOF, which has no minor unit, so a whole number is
+    // the only thing the menu accepts.
+    if (!Number.isInteger(amount) || amount <= 0) return null;
+    out = out.replace('{amount}', String(amount));
+  }
+
+  // Anything left unsubstituted means the template gained a slot this function
+  // does not know how to fill; better no code than a broken one.
+  return out.includes('{') ? null : out;
 };
 
 /**

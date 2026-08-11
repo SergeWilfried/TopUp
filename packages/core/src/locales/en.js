@@ -164,7 +164,7 @@ export default {
   pay: {
     dialKicker: 'Pay with {{provider}}',
     dialSim: 'Dial on your {{carrier}} SIM.',
-    dialAmount: 'Enter {{amount}} when the menu asks, then your PIN.',
+    dialAmount: 'The amount is already in the code. Just enter your PIN.',
     dialWaiting: 'We confirm automatically once the payment arrives. Keep this screen open.',
     approveOnHandset: 'Approve the payment prompt on {{phone}}. Keep this screen open.',
     customUnavailable: 'Custom amounts cannot be charged yet — pick a pack above.',
@@ -202,7 +202,7 @@ export default {
     unsupportedRegion: 'We cannot take payments in {{country}} yet.',
     payWith: 'Pay with',
     card: 'Card',
-    dialSub: 'Dial a code — no fee',
+    dialSub: 'Dial a code on your phone',
     momoSub: 'Charged to {{phone}}',
     earn: 'You will earn {{count}} pts on this purchase.',
     authorize: 'Authorize with {{provider}}',

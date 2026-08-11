@@ -164,7 +164,7 @@ export default {
   pay: {
     dialKicker: 'Payer avec {{provider}}',
     dialSim: 'Composez depuis votre SIM {{carrier}}.',
-    dialAmount: 'Saisissez {{amount}} quand le menu le demande, puis votre code.',
+    dialAmount: 'Le montant est déjà dans le code. Saisissez simplement votre code secret.',
     dialWaiting: 'Nous confirmons automatiquement dès réception du paiement. Gardez cet écran ouvert.',
     approveOnHandset: 'Validez la demande de paiement sur le {{phone}}. Gardez cet écran ouvert.',
     customUnavailable: 'Les montants libres ne sont pas encore encaissables — choisissez un forfait ci-dessus.',
@@ -202,7 +202,7 @@ export default {
     unsupportedRegion: 'Nous ne pouvons pas encore encaisser en {{country}}.',
     payWith: 'Payer avec',
     card: 'Carte',
-    dialSub: 'Composez un code — sans frais',
+    dialSub: 'Composez un code sur votre téléphone',
     momoSub: 'Débité sur {{phone}}',
     earn: 'Vous gagnerez {{count}} pts sur cet achat.',
     authorize: 'Autoriser avec {{provider}}',
