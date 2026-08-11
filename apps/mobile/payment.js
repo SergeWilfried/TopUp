@@ -2,7 +2,6 @@ import { getLocales, getCalendars } from 'expo-localization';
 import {
   CURRENCY_DECIMALS,
   MOBILE_MONEY_CARRIERS,
-  PROVIDER_LABELS,
   routeForCountry,
 } from '@topup/core';
 
@@ -54,30 +53,44 @@ export const detectCountry = ({ chosen, msisdn } = {}) =>
  * The payment options to render. Returns an empty list where we cannot take
  * money, so the caller can say so rather than showing a dead button.
  */
-export const methodsFor = (country) => {
+/**
+ * The wallets a customer can pay from.
+ *
+ * Mobile money only. Cards were removed deliberately: this is a domestic
+ * product bought several times a month by people who keep their money in a
+ * wallet, not on a card, and a card option that nobody uses still costs a
+ * processing relationship and a PCI conversation. The server still supports
+ * card rails, so re-enabling them for a diaspora flow is a client change.
+ *
+ * The wallet is chosen, never inferred from the number being topped up — the
+ * line you recharge and the wallet you pay from are independent, and on a
+ * dual-SIM handset they are routinely different.
+ */
+export const methodsFor = (country, dialable = []) => {
   const route = routeForCountry(country);
-  if (!route) return { supported: false, currency: null, methods: [] };
-
-  if (route.provider === 'pawapay') {
-    const carriers = MOBILE_MONEY_CARRIERS[country] ?? [];
-    return {
-      supported: true,
-      provider: route.provider,
-      currency: route.currency,
-      methods: carriers.map((carrier) => ({
-        id: `momo:${carrier}`,
-        kind: 'momo',
-        carrier,
-        title: carrier === 'MTN' ? 'MTN MoMo' : `${carrier} Money`,
-      })),
-    };
+  const carriers = MOBILE_MONEY_CARRIERS[country] ?? [];
+  if (!route || route.provider !== 'pawapay' || carriers.length === 0) {
+    return { supported: false, currency: null, methods: [] };
   }
 
   return {
     supported: true,
     provider: route.provider,
     currency: route.currency,
-    methods: [{ id: route.provider, kind: 'card', title: PROVIDER_LABELS[route.provider] }],
+    // One row per wallet, never two. Listing "Orange Money" twice — once to
+    // dial, once to be prompted — reads as a rendering fault, and the customer
+    // does not care which pipe the money goes down. Dialling is preferred where
+    // it is available because it costs no processing fee; the push flow is the
+    // fallback for wallets that cannot be dialled.
+    methods: carriers.map((carrier) => {
+      const canDial = dialable.includes(carrier);
+      return {
+        id: `${canDial ? 'dial' : 'momo'}:${carrier}`,
+        kind: canDial ? 'dial' : 'momo',
+        carrier,
+        title: carrier === 'MTN' ? 'MTN MoMo' : `${carrier} Money`,
+      };
+    }),
   };
 };
 

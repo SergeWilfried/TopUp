@@ -104,6 +104,9 @@ export default {
   },
 
   home: {
+    usualKicker: 'Your usual',
+    usualTitle: '{{pack}} · {{price}}',
+    usualSub: '{{carrier}} · {{number}}',
     quickBuy: 'Quick buy',
     title: 'Hello',
     airtime: 'AIRTIME',
@@ -159,6 +162,10 @@ export default {
   },
 
   pay: {
+    dialKicker: 'Pay with {{provider}}',
+    dialSim: 'Dial on your {{carrier}} SIM.',
+    dialAmount: 'Enter {{amount}} when the menu asks, then your PIN.',
+    dialWaiting: 'We confirm automatically once the payment arrives. Keep this screen open.',
     approveOnHandset: 'Approve the payment prompt on {{phone}}. Keep this screen open.',
     customUnavailable: 'Custom amounts cannot be charged yet — pick a pack above.',
     errorGeneric: 'That payment could not be completed. Nothing was charged.',
@@ -193,11 +200,10 @@ export default {
     unsupportedRegion: 'We cannot take payments in {{country}} yet.',
     payWith: 'Pay with',
     card: 'Card',
-    cardSub: 'Visa •••• 4921',
+    dialSub: 'Dial a code — no fee',
     momoSub: 'Charged to {{phone}}',
     earn: 'You will earn {{count}} pts on this purchase.',
     authorize: 'Authorize with {{provider}}',
-    dialNote: 'Dial this code to approve the payment from your mobile money account:',
     dialCta: 'DIAL CODE →',
     waiting: 'WAITING FOR APPROVAL…',
     waitingNote: 'Waiting for confirmation from {{provider}}. Your pack is delivered as soon as you approve.',

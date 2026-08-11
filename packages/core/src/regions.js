@@ -231,3 +231,54 @@ export const canonicalMsisdn = (raw, country) => {
   const e164 = toE164(raw, country);
   return e164 ? e164.slice(1) : null;
 };
+
+/**
+ * Merchant-payment USSD, per market and wallet.
+ *
+ * `{merchant}` is substituted with your merchant code. Deliberately no amount
+ * placeholder: these codes open the operator's merchant-payment menu, and the
+ * customer types the amount and their PIN inside that session. So the app has
+ * to tell them the figure, and the backend cannot assume the amount it asked
+ * for is the amount that arrives — which is why collection matches on amount
+ * rather than trusting it.
+ *
+ * Operator facts, like dialling codes. A market with no entry simply does not
+ * offer the dial rail.
+ */
+export const MOMO_MERCHANT_USSD = {
+  BF: {
+    Orange: '*144*10*{merchant}#',
+    Moov: '*155*10*{merchant}#',
+  },
+};
+
+export const merchantUssdFor = (country, carrier, merchantCode) => {
+  const tpl = MOMO_MERCHANT_USSD[String(country ?? '').toUpperCase()]?.[carrier];
+  return tpl && merchantCode ? tpl.replace('{merchant}', merchantCode) : null;
+};
+
+/**
+ * The country an already-canonical number belongs to.
+ *
+ * A stored identity is E.164 digits, which names its country unambiguously —
+ * far better evidence than a picker sitting on its launch default. Used for a
+ * signed-in customer, whose own number is known, so the payer country stops
+ * depending on what the picker happened to say at sign-in.
+ *
+ * Matched on dialling code *and* national length, so +225 and +22 cannot be
+ * confused and a wrong-length number resolves to nothing rather than to a
+ * neighbouring market.
+ */
+export const countryFromCanonical = (digits) => {
+  const d = String(digits ?? '').replace(/\D/g, '');
+  if (!d) return null;
+  const hits = Object.entries(DIALLING_CODES)
+    .filter(([code, dial]) => {
+      if (!d.startsWith(dial)) return false;
+      const lengths = nationalLengthsFor(code);
+      return lengths ? lengths.includes(d.length - dial.length) : false;
+    })
+    // Longest dialling code wins, so '225' beats a hypothetical '22'.
+    .sort((a, b) => b[1].length - a[1].length);
+  return hits.length ? hits[0][0] : null;
+};

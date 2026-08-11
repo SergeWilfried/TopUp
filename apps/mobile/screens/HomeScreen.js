@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Brand, EmptyState, Kicker, Tag, st } from '../ui';
 import { NoHistory } from '../illustrations';
 
-export default function HomeScreen({ points, history, deal, loading, onBuy, onDailyDeal, onVpn, hasVpn }) {
+export default function HomeScreen({ points, history, deal, lastBuy, loading, onBuy, onDailyDeal, onRepeat, onVpn, hasVpn }) {
   const { t } = useTranslation();
   const TILES = [
     { k: '₣', l: t('home.airtime'), svc: 'airtime' },
@@ -41,6 +41,31 @@ export default function HomeScreen({ points, history, deal, loading, onBuy, onDa
           ))}
         </View>
       </View>
+
+      {/* The whole point of the account. This is a utility bought a few times a
+          month, almost always the same pack for the same line — so the second
+          purchase should cost one tap, not six. Sits above the deal because a
+          known intent beats a promoted one. */}
+      {lastBuy ? (
+        <Pressable
+          onPress={onRepeat}
+          style={({ pressed }) => [
+            { marginHorizontal: 20, marginBottom: 20, borderWidth: 2, borderColor: C.text, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
+            pressed && { backgroundColor: C.accent100, borderColor: C.accent },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Kicker>{t('home.usualKicker')}</Kicker>
+            <Text style={{ fontFamily: F.heading, fontSize: 18, color: C.text }}>
+              {t('home.usualTitle', { pack: lastBuy.label, price: fmt(lastBuy.price) })}
+            </Text>
+            <Text style={st.subText}>
+              {t('home.usualSub', { carrier: lastBuy.carrier, number: lastBuy.recipient })}
+            </Text>
+          </View>
+          <Text style={st.arrow}>→</Text>
+        </Pressable>
+      ) : null}
 
       {/* Drawn from the catalogue line it actually buys. The copy used to be a
           fixed "2 Go pour 800 FCFA" while the button charged whichever pack

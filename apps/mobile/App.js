@@ -3,7 +3,8 @@
 // Navigation is a simple screen state machine; swap for react-navigation if preferred.
 // Tab destinations live in ./screens; shared primitives in ./ui; catalogue in ./data.
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, StatusBar, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, StatusBar, Alert, Linking } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
@@ -12,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import './i18n';
 import { loadStoredLanguage } from './i18n';
 
-import { C, F, fmt, fmtN, CARRIERS, detect, flagFor, navItems, networksFor, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
+import { C, F, fmt, fmtN, CARRIERS, countryFromCanonical, detect, flagFor, navItems, networksFor, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
 import {
   ApiError,
   catalogue as fetchCatalogue,
@@ -48,6 +49,16 @@ import LanguageScreen from './screens/LanguageScreen';
 // Which locations have been exported into WireGuard on this handset. Local by
 // nature: the server knows the peer exists, not whether the file was imported.
 const VPN_ADDED_STORE = 'topup.vpn.added';
+
+/**
+ * The last purchase that went through, kept for one-tap repeat.
+ *
+ * This is what an account is actually for in a product bought two to four times
+ * a month: not history, not deal notifications — removing the six taps the
+ * customer already made once. Stored locally so it works before sign-in and
+ * survives a signed-out session.
+ */
+const LAST_BUY_STORE = 'topup.lastBuy';
 
 /**
  * Where the country pickers start.
@@ -128,6 +139,9 @@ function TopUp() {
   const [payError, setPayError] = useState(null);
   const [order, setOrder] = useState(null); // in-flight purchase
   const [quote, setQuote] = useState(null); // what this market is actually charged
+  const [dialable, setDialable] = useState([]); // wallets payable by dialling
+  const [lastBuy, setLastBuy] = useState(null); // the repeatable purchase
+  const [copiedUssd, setCopiedUssd] = useState(false);
 
   const reloadCatalogue = React.useCallback(async () => {
     setCatFailed(false);
@@ -162,7 +176,13 @@ function TopUp() {
    * Declared up here because the quote effect depends on it, and every hook has
    * to run before the font/boot guard returns.
    */
-  const country = detectCountry({ chosen: dialCountry, msisdn: myNumber });
+  // A signed-in account's own number is canonical E.164 and names its country
+  // exactly; the picker may simply be sitting on the launch default, which the
+  // customer never touched. So the account wins once we have one.
+  const country = detectCountry({
+    chosen: countryFromCanonical(myNumber) ?? dialCountry,
+    msisdn: myNumber,
+  });
 
   /**
    * What this market will actually be charged.
@@ -176,7 +196,11 @@ function TopUp() {
     if (screen !== 'pay' || !pack?.id) { setQuote(null); return; }
     let alive = true;
     paymentMethods(country, pack.id)
-      .then((r) => alive && setQuote(r.quote ?? null))
+      .then((r) => {
+        if (!alive) return;
+        setQuote(r.quote ?? null);
+        setDialable(r.dialable ?? []);
+      })
       .catch(() => alive && setQuote(null));
     return () => { alive = false; };
   }, [screen, pack?.id, country]);
@@ -221,7 +245,7 @@ function TopUp() {
     const lang = i18n.language?.slice(0, 2) || 'en';
     Promise.all([
       loadStoredLanguage(),
-      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE]).catch(() => []),
+      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE, LAST_BUY_STORE]).catch(() => []),
       loadSession().catch(() => null),
       fetchCatalogue(lang).catch(() => null),
       vpnServers().catch(() => null),
@@ -231,6 +255,7 @@ function TopUp() {
       if (stored[SEEN_ONBOARDING]) { setScreen('welcome'); setAuthFrom('welcome'); }
       try {
         setVpnAdded(JSON.parse(stored[VPN_ADDED_STORE] || '[]'));
+        if (stored[LAST_BUY_STORE]) setLastBuy(JSON.parse(stored[LAST_BUY_STORE]));
       } catch {
         // Corrupt record — start clean rather than block launch.
       }
@@ -259,10 +284,11 @@ function TopUp() {
   if (!fontsLoaded || !booted) return null;
 
   const momoName = carrier === 'MTN' ? 'MTN MoMo' : carrier + ' Money';
-  const payment = methodsFor(country);
+  const payment = methodsFor(country, dialable);
   // Default to the first method the region actually offers.
   const method = payment.methods.find((m) => m.id === pay) ?? payment.methods[0] ?? null;
-  const isMomo = method?.kind === 'momo';
+  const isMomo = method?.kind === 'momo' || method?.kind === 'dial';
+  const isDial = method?.kind === 'dial';
   const earnPts = pack ? Math.floor(pack.p / 100) : 0;
   const digits = phone.replace(/\D/g, '');
   const isVpn = service === 'vpn';
@@ -294,6 +320,8 @@ function TopUp() {
         // it is not always the buyer's.
         recipientCountry,
         email: emailOk ? email.trim() : undefined,
+        instrument: isDial ? 'dial' : undefined,
+        carrier: isDial ? method.carrier : undefined,
       });
       setOrder(started);
 
@@ -310,6 +338,24 @@ function TopUp() {
       // Points, history and subscription all come back from the server rather
       // than being incremented locally, so the app cannot drift from the books.
       await refreshAccount();
+
+      // Remembered only on success, and only for the things worth repeating —
+      // a VPN plan or an eSIM is not a habitual purchase.
+      if (!isVpn && service !== 'esim' && pack?.id) {
+        const repeat = {
+          productId: pack.id,
+          label: pack.n,
+          price: pack.p,
+          service,
+          carrier,
+          recipient: phone,
+          recipientCountry,
+          methodId: method?.id ?? null,
+        };
+        setLastBuy(repeat);
+        AsyncStorage.setItem(LAST_BUY_STORE, JSON.stringify(repeat)).catch(() => {});
+      }
+
       setOrder(null);
       if (isVpn) {
         // Renewing changes nothing they have to re-scan, so don't send them
@@ -507,7 +553,7 @@ function TopUp() {
                 setVerifying(true);
                 setOtpError(null);
                 try {
-                  await verifyCode(phone, otp);
+                  await verifyCode(phone, otp, dialCountry);
                   await refreshAccount();
                   setScreen('home');
                 } catch (e) {
@@ -527,6 +573,21 @@ function TopUp() {
           points={points}
           history={history}
           deal={deal ? toPack(deal) : null}
+          lastBuy={lastBuy}
+          // Straight to payment: the pack, the line and the wallet are all
+          // known, so there is nothing left to ask.
+          onRepeat={() => {
+            const p = (cat?.[lastBuy.service] ?? []).find((x) => x.id === lastBuy.productId);
+            if (!p) return; // withdrawn from the catalogue since
+            setService(lastBuy.service);
+            setCarrier(lastBuy.carrier);
+            setPhone(lastBuy.recipient);
+            setRecipientCountry(lastBuy.recipientCountry);
+            if (lastBuy.methodId) setPay(lastBuy.methodId);
+            setPack(toPack(p));
+            setPayError(null);
+            setScreen('pay');
+          }}
           onBuy={goBuy}
           // The deal has to be a real catalogue line: checkout buys a product id,
           // and a hand-built pack has nothing to charge against.
@@ -791,11 +852,16 @@ function TopUp() {
             <View style={{ gap: 8 }}>
               <Text style={st.fieldLabel}>{t('pay.payWith')}</Text>
               {payment.methods
-                .map((m) =>
-                  m.kind === 'momo'
-                    ? { id: m.id, name: m.title, sub: t('pay.momoSub', { phone }) }
-                    : { id: m.id, name: m.title, sub: t('pay.cardSub') },
-                )
+                .map((m) => ({
+                  id: m.id,
+                  // Two rows can share a wallet name, so the subtitle has to
+                  // carry the difference: dialling a code versus being prompted.
+                  name: m.title,
+                  sub:
+                    m.kind === 'dial'
+                      ? t('pay.dialSub')
+                      : t('pay.momoSub', { phone: myNumber || phone }),
+                }))
                 .map((m) => (
                 <Pressable key={m.id} onPress={() => setPay(m.id)} style={[st.payOpt, method?.id === m.id && { borderColor: C.accent, backgroundColor: C.accent100 }]}>
                   <View style={[st.radioDot, method?.id === m.id && { backgroundColor: C.accent, borderColor: C.accent }]} />
@@ -814,6 +880,34 @@ function TopUp() {
             {/* PawaPay pushes an approval prompt to the handset — there is no
                 USSD string to dial, so this waits on the customer rather than
                 asking them to type anything. */}
+            {/* Dial-to-pay. The code opens the operator's merchant menu; the
+                amount and PIN are typed inside that session, so the figure has
+                to be stated here — the string cannot carry it. */}
+            {order?.action === 'dial' && paying && (
+              <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 12 }}>
+                <Kicker>{t('pay.dialKicker', { provider: method?.title ?? '' })}</Kicker>
+                <View style={[st.rowBetween, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.divider, padding: 12 }]}>
+                  <Text style={{ fontFamily: F.heading, fontSize: 22, color: C.text }}>{order.ussd}</Text>
+                  <Btn
+                    variant="ghost"
+                    label={copiedUssd ? t('common.copied') : t('common.copy')}
+                    onPress={async () => {
+                      await Clipboard.setStringAsync(order.ussd);
+                      setCopiedUssd(true);
+                      setTimeout(() => setCopiedUssd(false), 2000);
+                    }}
+                  />
+                </View>
+                <Text style={st.subText}>{t('pay.dialSim', { carrier: method?.carrier ?? '' })}</Text>
+                <Text style={st.subText}>{t('pay.dialAmount', { amount: fmt(order.amount) })}</Text>
+                <Btn
+                  label={t('pay.dialCta')}
+                  onPress={() => Linking.openURL('tel:' + encodeURIComponent(order.ussd)).catch(() => {})}
+                />
+                <Text style={st.subText}>{t('pay.dialWaiting')}</Text>
+              </View>
+            )}
+
             {order?.action === 'approve_on_handset' && paying && (
               <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 8 }}>
                 <Kicker>{t('pay.authorize', { provider: method?.title ?? momoName })}</Kicker>

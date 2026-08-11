@@ -104,6 +104,9 @@ export default {
   },
 
   home: {
+    usualKicker: 'Votre habituel',
+    usualTitle: '{{pack}} · {{price}}',
+    usualSub: '{{carrier}} · {{number}}',
     quickBuy: 'Achat rapide',
     title: 'Bonjour',
     airtime: 'CRÉDIT',
@@ -159,6 +162,10 @@ export default {
   },
 
   pay: {
+    dialKicker: 'Payer avec {{provider}}',
+    dialSim: 'Composez depuis votre SIM {{carrier}}.',
+    dialAmount: 'Saisissez {{amount}} quand le menu le demande, puis votre code.',
+    dialWaiting: 'Nous confirmons automatiquement dès réception du paiement. Gardez cet écran ouvert.',
     approveOnHandset: 'Validez la demande de paiement sur le {{phone}}. Gardez cet écran ouvert.',
     customUnavailable: 'Les montants libres ne sont pas encore encaissables — choisissez un forfait ci-dessus.',
     errorGeneric: 'Le paiement n’a pas abouti. Rien n’a été débité.',
@@ -193,11 +200,10 @@ export default {
     unsupportedRegion: 'Nous ne pouvons pas encore encaisser en {{country}}.',
     payWith: 'Payer avec',
     card: 'Carte',
-    cardSub: 'Visa •••• 4921',
+    dialSub: 'Composez un code — sans frais',
     momoSub: 'Débité sur {{phone}}',
     earn: 'Vous gagnerez {{count}} pts sur cet achat.',
     authorize: 'Autoriser avec {{provider}}',
-    dialNote: 'Composez ce code pour approuver le paiement depuis votre compte mobile money :',
     dialCta: 'COMPOSER LE CODE →',
     waiting: 'EN ATTENTE D’APPROBATION…',
     waitingNote: 'En attente de confirmation de {{provider}}. Votre forfait est livré dès que vous approuvez.',

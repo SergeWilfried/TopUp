@@ -5,9 +5,11 @@ import * as pawapay from './pawapay-api';
 import * as paystack from './paystack-api';
 import * as stripe from './stripe-api';
 import { isQuoteError, loadRates, quoteFor, type Quote } from './pricing';
+import { dialableCarriers, matchCollection, prepareDial } from './ussd';
 import { canDeliver, deliverOrder } from '../delivery';
 import { MOBILE_MONEY_CARRIERS, diallingCodeFor, iso3For, routeForCountry, toMinorUnits } from '@topup/core';
 import { normaliseMsisdn } from '../vpn/auth';
+import { sha256, timingSafeEqual } from '../env';
 
 /**
  * Checkout.
@@ -126,6 +128,10 @@ checkout.get('/methods', async (c) => {
     provider: route.provider,
     currency: route.currency,
     carriers: (MOBILE_MONEY_CARRIERS as Record<string, string[]>)[country] ?? [],
+    // Wallets that can be paid by dialling instead of by push. Costs us no
+    // processing fee, so it is offered wherever a merchant code is configured.
+    dialable: dialableCarriers(c.env, country, (MOBILE_MONEY_CARRIERS as Record<string, string[]>)[country] ?? [])
+      .map((d) => d.carrier),
     quote,
   });
 });
@@ -143,6 +149,10 @@ checkout.post('/', async (c) => {
     email?: string;
     /** Where the buyer is paying from — unrelated to where an eSIM is used. */
     country?: string;
+    /** 'push' asks the provider to prompt the handset; 'dial' collects direct. */
+    instrument?: 'push' | 'dial';
+    /** Which wallet, when dialling. Chosen by the customer, never inferred. */
+    carrier?: string;
   };
   const body = await c.req.json<Body>().catch((): Body => ({}));
 
@@ -177,8 +187,10 @@ checkout.post('/', async (c) => {
    * checked against the country we are pricing for — a Senegalese number sent
    * with `country=BF` would otherwise be charged on the wrong market's rail.
    */
+  // Dialling never reaches PawaPay, so its provider prediction — a network call
+  // that can fail — must not gate a rail that does not use it.
   let prediction: pawapay.Prediction | null = null;
-  if (provider === 'pawapay') {
+  if (provider === 'pawapay' && body.instrument !== 'dial') {
     const international = internationalise(msisdn, country);
     if (!international) return c.json({ error: 'country_unsupported', field: 'country' }, 422);
 
@@ -189,8 +201,9 @@ checkout.post('/', async (c) => {
     if (expected && prediction.country !== expected)
       return c.json({ error: 'msisdn_country_mismatch', field: 'msisdn' }, 400);
   }
-  // Recorded against the customer for display; the rail uses the prediction.
-  const carrier = prediction ? prediction.provider : null;
+  // Recorded against the customer for display; the rail uses the prediction
+  // when there is one, and the wallet the customer picked when dialling.
+  const carrier = prediction ? prediction.provider : (body.instrument === 'dial' ? body.carrier ?? null : null);
   /**
    * Refuse an order nothing can deliver, before any money moves.
    *
@@ -253,7 +266,17 @@ checkout.post('/', async (c) => {
     c.env.DB.prepare(
       `INSERT INTO payments (id, order_id, provider, provider_ref, amount, currency, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-    ).bind(paymentId, orderId, provider, paymentId, quote.minorAmount, quote.currency, now()),
+    ).bind(
+      paymentId,
+      orderId,
+      body.instrument === 'dial' ? 'ussd' : provider,
+      // A dialled payment has no reference until the operator gives us one;
+      // leaving it null is what lets the collector claim it exactly once.
+      body.instrument === 'dial' ? null : paymentId,
+      quote.minorAmount,
+      quote.currency,
+      now(),
+    ),
   ]);
 
   const fail = async (reason: string) => {
@@ -266,6 +289,20 @@ checkout.post('/', async (c) => {
     ]);
     return c.json({ error: 'payment_failed', reason, orderId }, 502);
   };
+
+  // Dial-to-pay: no provider call at all. The payment sits pending until the
+  // operator's confirmation reaches /checkout/collect, which is the only
+  // evidence this rail produces.
+  if (body.instrument === 'dial') {
+    const dial = prepareDial(c.env, {
+      country,
+      carrier: body.carrier ?? '',
+      amount: quote.amount,
+      currency: quote.currency,
+    });
+    if (!dial.ok) return fail(dial.error);
+    return c.json({ orderId, paymentId, status: 'pending', action: 'dial', ...dial.dial, quote }, 201);
+  }
 
   if (provider === 'pawapay') {
     const result = await pawapay.createDeposit(c.env, {
@@ -483,6 +520,51 @@ async function grantVpn(env: Env, orderId: string, sku: string | null) {
     .bind(base + grant, now(), plan?.name ?? 'VPN', buyer.userId)
     .run();
 }
+
+/**
+ * Inbound mobile-money collection, reported by the merchant-line device.
+ *
+ * This is the whole confirmation path for dial-to-pay: the operator texts our
+ * merchant line, a device on that SIM reads the message and posts it here.
+ * The body is structured rather than raw text on purpose — parsing belongs next
+ * to the SIM that knows its operator's wording, and the worker stays free of a
+ * format that changes without notice.
+ *
+ * Unmatched credits are recorded as such and left alone. Applying one to a
+ * plausible-looking order would credit the wrong customer, which is worse than
+ * a payment waiting an hour for a human.
+ */
+checkout.post('/collect', async (c) => {
+  const token = (c.req.header('authorization') ?? '').replace(/^Bearer /, '');
+  if (!c.env.COLLECTOR_TOKEN) return c.json({ error: 'collector_not_configured' }, 503);
+  if (!token || !(await timingSafeEqual(await sha256(token), await sha256(c.env.COLLECTOR_TOKEN)))) {
+    return c.json({ error: 'unauthorized' }, 401);
+  }
+
+  type Body = { msisdn?: string; amount?: number; currency?: string; providerRef?: string; country?: string };
+  const b = await c.req.json<Body>().catch((): Body => ({}));
+  if (!b.msisdn || !b.providerRef || typeof b.amount !== 'number') {
+    return c.json({ error: 'msisdn_amount_and_reference_required' }, 400);
+  }
+
+  const match = await matchCollection(c.env, {
+    msisdn: b.msisdn,
+    amount: b.amount,
+    currency: (b.currency ?? 'XOF').toUpperCase(),
+    providerRef: b.providerRef,
+    country: (b.country ?? c.env.SMS_DEFAULT_COUNTRY ?? 'BF').toUpperCase(),
+  });
+
+  if (!match.matched) {
+    // 200, not an error: the device did its job. The money is simply not
+    // attributable yet, and it must stop retrying.
+    console.warn(`unmatched collection ${b.providerRef}: ${match.reason}`);
+    return c.json({ matched: false, reason: match.reason });
+  }
+
+  const outcome = await fulfil(c.env, match.paymentId, b.amount);
+  return c.json({ matched: true, orderId: match.orderId, outcome: outcome.reason });
+});
 
 // ── provider callbacks ─────────────────────────────────────────────────────
 checkout.post('/callback/pawapay', async (c) => {

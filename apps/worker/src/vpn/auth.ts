@@ -1,5 +1,6 @@
 import { days, now, randHex, sha256, timingSafeEqual, type Env } from '../env';
-import { sendSms, smsConfigured } from './twilio';
+import { liveSendBlocked, sendSms, smsConfigured } from './twilio';
+import { checkVerification, startVerification, verifyConfigured } from './verify';
 import { canonicalMsisdn, toE164 } from '@topup/core';
 
 export type User = {
@@ -66,7 +67,7 @@ export async function requestOtp(
   env: Env,
   identifier: string,
   channel: Channel,
-): Promise<OtpResult & { code?: string }> {
+): Promise<OtpResult & { code?: string; delegated?: boolean }> {
   const t = now();
   const existing = await env.DB.prepare(
     `SELECT send_count, window_started_at FROM otp_codes WHERE identifier = ?`,
@@ -84,7 +85,16 @@ export async function requestOtp(
     windowStart = existing.window_started_at;
   }
 
-  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
+  /**
+   * When Twilio Verify owns SMS we generate nothing — but the throttle above
+   * still runs, and deliberately so: each verification is a billable call, so
+   * an unthrottled endpoint is a way to spend our money, not just to annoy a
+   * customer. The row below then records only the send count.
+   */
+  const delegated = channel === 'sms' && verifyConfigured(env);
+  const code = delegated
+    ? null
+    : String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
   await env.DB.prepare(
     `INSERT INTO otp_codes (identifier, channel, code_hash, expires_at, attempts, send_count, window_started_at)
      VALUES (?, ?, ?, ?, 0, ?, ?)
@@ -96,10 +106,19 @@ export async function requestOtp(
        send_count = excluded.send_count,
        window_started_at = excluded.window_started_at`,
   )
-    .bind(identifier, channel, await sha256(code), t + OTP_TTL, sendCount, windowStart)
+    .bind(
+      identifier,
+      channel,
+      // Nothing verifiable is stored for a delegated code; the row exists only
+      // to carry the send counter.
+      code ? await sha256(code) : '',
+      t + OTP_TTL,
+      sendCount,
+      windowStart,
+    )
     .run();
 
-  return { ok: true, code };
+  return { ok: true, code: code ?? undefined, delegated };
 }
 
 export type VerifyResult =
@@ -119,6 +138,24 @@ export async function verifyOtp(
   channel: Channel,
 ): Promise<VerifyResult> {
   const t = now();
+
+  // Twilio holds the code for SMS, so there is nothing local to compare. It
+  // also counts attempts and expires the code, which is why no attempt
+  // bookkeeping happens on this path.
+  if (channel === 'sms' && verifyConfigured(env)) {
+    const outcome = await checkVerification(env, `+${identifier}`, code);
+    if (!outcome.approved) {
+      // Wrong, expired and spent are all one answer to the customer: saying
+      // which would reveal whether a live code exists for that number.
+      if (outcome.reason === 'unreachable' || outcome.reason === 'not_configured') {
+        return { ok: false, error: 'verification_unavailable', status: 503 };
+      }
+      return { ok: false, error: 'invalid_code', status: 401 };
+    }
+    await env.DB.prepare(`DELETE FROM otp_codes WHERE identifier = ?`).bind(identifier).run();
+    return await establishSession(env, identifier, channel);
+  }
+
   const row = await env.DB.prepare(
     `SELECT code_hash, expires_at, attempts FROM otp_codes WHERE identifier = ?`,
   )
@@ -146,6 +183,18 @@ export async function verifyOtp(
 
   await env.DB.prepare(`DELETE FROM otp_codes WHERE identifier = ?`).bind(identifier).run();
 
+  return await establishSession(env, identifier, channel);
+}
+
+/**
+ * Finds or creates the account and mints a session.
+ *
+ * Split out because proving a number now happens two ways — locally for email,
+ * and at Twilio for SMS — and both must arrive at exactly the same account
+ * linking and session. Duplicating it is how the two paths drift apart.
+ */
+async function establishSession(env: Env, identifier: string, channel: Channel): Promise<VerifyResult> {
+  const t = now();
   const column = columnFor(channel);
   let user = await env.DB.prepare(`SELECT * FROM users WHERE ${column} = ?`)
     .bind(identifier)
@@ -228,11 +277,23 @@ async function sendOtpSms(
   const to = toE164(opts.raw ?? msisdn, opts.country ?? env.SMS_DEFAULT_COUNTRY ?? 'BF');
   if (!to) return { ok: false, error: 'msisdn_unroutable' };
 
+  // Verify sends its own message. Sending ours too would deliver two different
+  // codes for one login, and only one of them would work.
+  if (verifyConfigured(env)) {
+    const started = await startVerification(env, to, 'sms');
+    if (!started.ok) {
+      console.error(`Verify start failed: ${started.error}`);
+      return { ok: false, error: started.error };
+    }
+    return { ok: true };
+  }
+
   // Printing a live code is only ever acceptable off production, and only when
   // nothing could have delivered it. Testing for a missing account SID was too
   // narrow: a half-filled Twilio config — an account but no sender — skipped
   // the log and then failed to send, breaking local sign-in entirely.
-  if (env.ENVIRONMENT !== 'production' && !smsConfigured(env)) {
+  // Nothing can deliver: either no provider, or live sending is blocked.
+  if (!smsConfigured(env) || liveSendBlocked(env)) {
     console.log(`[dev] OTP for ${to}: ${code}`);
     return { ok: true };
   }

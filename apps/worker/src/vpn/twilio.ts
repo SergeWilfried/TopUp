@@ -33,8 +33,30 @@ export const smsConfigured = (env: Env) =>
  * failure should be visible to the customer, and an OTP endpoint has to think
  * about that carefully.
  */
+/**
+ * Blocks live Twilio unless something explicitly says this is the real thing.
+ *
+ * Deliberately fail-safe. The first version keyed on `ENVIRONMENT !==
+ * 'production'`, which is useless here: wrangler.jsonc pins ENVIRONMENT to
+ * "production", so a laptop running `wrangler dev` looks exactly like the
+ * deployed worker and sent real messages to a real handset — twice, before the
+ * mistake was caught. Verify sends do not even appear in the Messages API, so
+ * the send was invisible to the obvious check.
+ *
+ * The only signals trusted now are ones a local run cannot have by accident:
+ * an explicit ALLOW_LIVE_SMS=1 set on the deployed worker, or a base URL that
+ * points somewhere other than Twilio (a test double).
+ */
+export const liveSendBlocked = (env: Env) => {
+  if (env.ALLOW_LIVE_SMS === '1') return false;
+  const base = env.TWILIO_BASE_URL ?? env.TWILIO_VERIFY_BASE_URL ?? '';
+  // A double is fine. No override at all means the real host, which is not.
+  return !base || base.includes('twilio.com');
+};
+
 export async function sendSms(env: Env, to: string, body: string): Promise<SmsResult> {
   if (!smsConfigured(env)) return { ok: false, error: 'not_configured' };
+  if (liveSendBlocked(env)) return { ok: false, error: 'live_send_blocked_in_dev' };
 
   const form = new URLSearchParams({ To: to, Body: body });
   // A Messaging Service handles sender selection and per-country compliance;

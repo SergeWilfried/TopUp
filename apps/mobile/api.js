@@ -65,9 +65,16 @@ async function request(method, path, body) {
 export const requestCode = (msisdn, country) =>
   request('POST', '/auth/otp', { msisdn, country });
 
-/** Exchanges the code for a session and remembers it. */
-export async function verifyCode(msisdn, code) {
-  const result = await request('POST', '/auth/verify', { msisdn, code });
+/**
+ * Exchanges the code for a session and remembers it.
+ *
+ * `country` is required here for the same reason it is on the request: identity
+ * is the canonical E.164 form, and a national number cannot be resolved to it
+ * without knowing the market. Omitting it made every verification fail with
+ * msisdn_invalid.
+ */
+export async function verifyCode(msisdn, code, country) {
+  const result = await request('POST', '/auth/verify', { msisdn, code, country });
   cachedToken = result.token;
   await AsyncStorage.setItem(TOKEN_KEY, result.token).catch(() => {});
   return result.user;
@@ -116,8 +123,13 @@ export const paymentMethods = (country, productId) =>
  * Resolves to `{ orderId, status, action, url?, quote }` — `action` is
  * 'approve_on_handset' for mobile money or 'redirect' for card rails.
  */
-export const startCheckout = ({ productId, country, msisdn, recipientMsisdn, recipientCountry, email }) =>
-  request('POST', '/checkout', { productId, country, msisdn, recipientMsisdn, recipientCountry, email });
+export const startCheckout = ({ productId, country, msisdn, recipientMsisdn, recipientCountry, email, instrument, carrier }) =>
+  request('POST', '/checkout', {
+    productId, country, msisdn, recipientMsisdn, recipientCountry, email,
+    // 'dial' collects straight into our merchant wallet — no processing fee and
+    // no provider call; the customer's handset is the rail.
+    instrument, carrier,
+  });
 
 /** Authoritative order state. The app polls this rather than trusting a callback. */
 export const orderStatus = (orderId) => request('GET', `/checkout/${encodeURIComponent(orderId)}`);

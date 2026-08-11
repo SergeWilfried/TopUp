@@ -22,6 +22,26 @@ export type Env = {
   SMS_DEFAULT_COUNTRY?: string;
   /** Overridden in tests to point at a local double. */
   TWILIO_BASE_URL?: string;
+  /**
+   * Twilio Verify service (VA…). When set, Twilio owns the whole code
+   * lifecycle for SMS and nothing is stored here.
+   */
+  TWILIO_VERIFY_SERVICE_SID?: string;
+  TWILIO_VERIFY_BASE_URL?: string;
+  /**
+   * '1' on the deployed worker only. Live SMS is blocked without it, because
+   * ENVIRONMENT cannot distinguish a local run from the real one.
+   */
+  ALLOW_LIVE_SMS?: string;
+
+  /**
+   * Merchant codes for dial-to-pay collection, as JSON:
+   *   {"BF":{"Orange":"123456","Moov":"654321"}}
+   * A wallet with no code simply is not offered the dial rail.
+   */
+  MERCHANT_CODES?: string;
+  /** Shared secret the collector device signs its reports with. */
+  COLLECTOR_TOKEN?: string;
 
   // Checkout providers.
   PUBLIC_BASE_URL?: string;
