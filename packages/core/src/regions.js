@@ -248,7 +248,7 @@ export const canonicalMsisdn = (raw, country) => {
 export const MOMO_MERCHANT_USSD = {
   BF: {
     Orange: '*144*10*{merchant}*{amount}#',
-    Moov: '*155*10*{merchant}*{amount}#',
+    Moov: '*555*4*1*{merchant}*{amount}#',
   },
 };
 

@@ -827,7 +827,6 @@ function TopUp() {
                   zero-fee line would just be noise on eSIM and VPN. */}
               {quote && quote.feeXof > 0 && (
                 <>
-                  <SummaryRow k={t('pay.subtotal')} v={formatMoney(quote.subtotal, quote.currency)} />
                   <SummaryRow
                     k={t('pay.fee', { pct: quote.feePct })}
                     v={formatMoney(quote.fee, quote.currency)}
