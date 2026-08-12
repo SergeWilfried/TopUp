@@ -48,7 +48,7 @@ export type SyncResult = {
  * bought.
  */
 export async function syncDataBundles(env: Env, country: string, countryName: string): Promise<SyncResult> {
-  const seen = new Set<string>();
+  const seenBundleIds = new Set<string>();
   const operators: SyncResult['operators'] = [];
   let synced = 0;
 
@@ -62,7 +62,7 @@ export async function syncDataBundles(env: Env, country: string, countryName: st
 
     for (const b of result.bundles) {
       const id = `lam-${b.bundleid}`;
-      seen.add(id);
+      seenBundleIds.add(String(b.bundleid));
       const price = retailPrice(Number(b.amount));
       await env.DB.prepare(
         `INSERT INTO products (id, type, name, name_key, country, network, terms, terms_key,
@@ -99,14 +99,26 @@ export async function syncDataBundles(env: Env, country: string, countryName: st
     }
   }
 
-  // Anything previously synced for this market and no longer offered.
-  const stale = await env.DB.prepare(
-    `UPDATE products SET enabled = 0
-     WHERE type = 'data' AND bundle_id IS NOT NULL AND country = ? AND enabled = 1
-       AND id NOT IN (SELECT value FROM json_each(?))`,
-  )
-    .bind(countryName, JSON.stringify([...seen]))
-    .run();
+  // Anything previously synced for this market and no longer offered, plus the
+  // hand-seeded rows the sync replaces.
+  //
+  // The old catalogue was invented locally: "3 GB +500 MB" with no bundle_id,
+  // mapping to nothing the distributor sells. Those rows are not merely stale,
+  // they are unbuyable — delivery refuses a data product with no bundle to
+  // order — so leaving them enabled alongside the real ones puts products in
+  // the shop that fail at checkout, and lets the home screen promote one.
+  //
+  // Guarded on having actually received bundles: a sync that failed to reach
+  // the distributor must not empty the shop on its way out.
+  const stale = synced
+    ? await env.DB.prepare(
+        `UPDATE products SET enabled = 0
+         WHERE type = 'data' AND country = ? AND enabled = 1
+           AND (bundle_id IS NULL OR bundle_id NOT IN (SELECT value FROM json_each(?)))`,
+      )
+        .bind(countryName, JSON.stringify([...seenBundleIds]))
+        .run()
+    : { meta: { changes: 0 } };
 
   console.log(`[bundles] ${country}: ${synced} synced, ${stale.meta.changes} disabled at ${now()}`);
   return { synced, disabled: stale.meta.changes ?? 0, operators };

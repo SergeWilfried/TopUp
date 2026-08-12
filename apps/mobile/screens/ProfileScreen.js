@@ -6,19 +6,29 @@ import { methodsFor } from '../payment';
 import { LANGS } from '../i18n';
 import { TabHeader, st } from '../ui';
 
-export default function ProfileScreen({ carrier, phone, country, esims, vpn, onEsims, onVpn, onLanguage, onSignOut }) {
+export default function ProfileScreen({ carrier, phone, country, esims, vpn, onEsims, onVpn, onLanguage, onSignOut, featureOn = () => true }) {
   const { t, i18n } = useTranslation();
   const methods = methodsFor(country)
     .methods.map((m) => m.title)
     .join(' · ');
 
+  /**
+   * A switched-off feature disappears — unless the customer already owns one.
+   *
+   * The switch stops new purchases; it does not repossess what someone paid
+   * for. Hiding the row from a customer with a live subscription would strand
+   * them without the configs they bought, which is a worse failure than showing
+   * a service that cannot currently be bought again.
+   */
   const rows = [
     {
+      show: featureOn('esim') || esims.length > 0,
       name: t('profile.esims'),
       sub: t('profile.esimsSub', { total: esims.length, active: esims.filter((e) => e.status === 'active').length }),
       go: onEsims,
     },
     {
+      show: featureOn('vpn') || Boolean(vpn),
       name: t('profile.vpn'),
       sub: vpn
         ? t('profile.vpnActive', { plan: vpn.plan, date: fmtDate(vpn.expiresAt) })
@@ -66,7 +76,7 @@ export default function ProfileScreen({ carrier, phone, country, esims, vpn, onE
 
       <View style={{ paddingHorizontal: 20, paddingBottom: 20, paddingTop: 4 }}>
         <View style={{ borderTopWidth: 2, borderColor: C.divider }}>
-          {rows.map((r) => (
+          {rows.filter((r) => r.show !== false).map((r) => (
             <Pressable
               key={r.name}
               onPress={r.go}

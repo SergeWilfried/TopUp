@@ -51,7 +51,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           month, almost always the same pack for the same line — so the second
           purchase should cost one tap, not six. Sits above the deal because a
           known intent beats a promoted one. */}
-      {lastBuy ? (
+      {lastBuy && featureOn(lastBuy.service) ? (
         <Pressable
           onPress={onRepeat}
           style={({ pressed }) => [
@@ -96,7 +96,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
         </Pressable>
       )}
 
-      {featureOn('vpn') && (
+      {(featureOn('vpn') || hasVpn) && (
       <Pressable
         onPress={onVpn}
         style={({ pressed }) => [

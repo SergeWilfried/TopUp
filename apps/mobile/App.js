@@ -613,6 +613,9 @@ function TopUp() {
           onRepeat={() => {
             const p = (cat?.[lastBuy.service] ?? []).find((x) => x.id === lastBuy.productId);
             if (!p) return; // withdrawn from the catalogue since
+            // One tap goes straight to payment, skipping every screen that
+            // would otherwise have hidden a switched-off service.
+            if (!featureOn(lastBuy.service)) return;
             setService(lastBuy.service);
             setCarrier(lastBuy.carrier);
             setPhone(lastBuy.recipient);
@@ -652,6 +655,7 @@ function TopUp() {
           vpn={vpn}
           onEsims={() => setScreen('esim')}
           onVpn={() => setScreen('vpn')}
+          featureOn={featureOn}
           onLanguage={() => setScreen('language')}
           onSignOut={signOut}
         />
