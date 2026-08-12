@@ -6,6 +6,7 @@ import * as paystack from './paystack-api';
 import * as stripe from './stripe-api';
 import { isQuoteError, loadRates, quoteFor, serviceFeeXof, type Quote } from './pricing';
 import { dialableCarriers, matchCollection, prepareDial } from './ussd';
+import { featuresFor, isFeature } from '../features';
 import { canDeliver, deliverOrder } from '../delivery';
 import { MOBILE_MONEY_CARRIERS, diallingCodeFor, iso3For, routeForCountry, toMinorUnits } from '@topup/core';
 import { normaliseMsisdn } from '../vpn/auth';
@@ -182,6 +183,31 @@ checkout.post('/', async (c) => {
   if (!product) return c.json({ error: 'unknown_product', field: 'productId' }, 404);
   // A disabled product must not be purchasable, even by a stale client.
   if (!product.enabled) return c.json({ error: 'product_unavailable', field: 'productId' }, 409);
+
+  /**
+   * Market switches, enforced here rather than only in the app.
+   *
+   * Hiding a service in the UI is cosmetic: every installed APK that predates
+   * the change still knows the product id and would sail straight past it. A
+   * kill switch that a stale client ignores is not a kill switch.
+   *
+   * The service is judged by where it is delivered and the rail by where it is
+   * paid from — for a Burkinabè buying a Chinese eSIM those are different
+   * countries, and conflating them would switch off the wrong market.
+   */
+  const deliveryCountry = (body.recipientCountry ?? country).toUpperCase();
+  const flags = await featuresFor(c.env, deliveryCountry);
+  if (isFeature(product.type) && !flags[product.type]) {
+    return c.json({ error: 'feature_unavailable', feature: product.type }, 403);
+  }
+
+  // Same market in the common case, so the second lookup is skipped rather than
+  // repeated.
+  const railFlags = deliveryCountry === country ? flags : await featuresFor(c.env, country);
+  const rail = body.instrument === 'dial' ? 'dial' : 'momo';
+  if (provider === 'pawapay' && !railFlags[rail]) {
+    return c.json({ error: 'feature_unavailable', feature: rail }, 403);
+  }
 
   /**
    * Which wallet to charge.

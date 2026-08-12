@@ -217,3 +217,16 @@ a:hover { color: var(--color-accent-700); }
   white-space: pre;
   user-select: all;
 }
+
+/* ── feature switch cells ────────────────────────────────────────────────── */
+.flagcell {
+  background: none;
+  border: 1px solid var(--color-neutral-300);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 10px;
+  min-width: 34px;
+}
+.flagcell:hover:not(:disabled) { border-color: var(--color-text); background: var(--color-accent-100); }
+.flagcell:disabled { cursor: progress; opacity: 0.6; }

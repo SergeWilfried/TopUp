@@ -101,6 +101,16 @@ export const myOrders = (lang) => request('GET', `/me/orders?lang=${encodeURICom
  */
 export const catalogue = (lang) => request('GET', `/catalogue?lang=${encodeURIComponent(lang)}`);
 
+/**
+ * Which services are switched on in a market.
+ *
+ * Asked per country because a corridor is turned off one market at a time. The
+ * app hides what is off; the worker refuses it regardless, so an older build
+ * that never learned about a switch still cannot buy through it.
+ */
+export const features = (country) =>
+  request('GET', `/features?country=${encodeURIComponent(country)}`);
+
 export const esimPlans = (country, lang) =>
   request('GET', `/esim/plans/${encodeURIComponent(country)}?lang=${encodeURIComponent(lang)}`);
 

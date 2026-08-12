@@ -17,6 +17,7 @@ import { C, F, fmt, fmtN, CARRIERS, countryFromCanonical, detect, flagFor, navIt
 import {
   ApiError,
   catalogue as fetchCatalogue,
+  features as fetchFeatures,
   esimPlans as fetchEsimPlans,
   loadSession,
   me,
@@ -134,6 +135,9 @@ function TopUp() {
   const [cat, setCat] = useState(null); // /catalogue
   // Distinct from `cat === null`: that is "not yet", this is "asked and failed".
   const [catFailed, setCatFailed] = useState(false);
+  // Every feature on until the worker says otherwise: a failed or slow lookup
+  // should not blank the home screen, and the worker enforces the truth anyway.
+  const [features, setFeatures] = useState(null);
   const [locations, setLocations] = useState([]); // /servers
   const [esimPlanList, setEsimPlanList] = useState([]);
   const [payError, setPayError] = useState(null);
@@ -183,6 +187,29 @@ function TopUp() {
     chosen: countryFromCanonical(myNumber) ?? dialCountry,
     msisdn: myNumber,
   });
+
+  /**
+   * Which services this market has switched on.
+   *
+   * Placed after `country` rather than beside the catalogue load, because it
+   * depends on it — and `country` is declared below the boot guard. Reading it
+   * earlier would be a use-before-initialisation crash on the first render.
+   *
+   * A failed lookup leaves `features` null, which reads as "everything on":
+   * the worker refuses disabled services on its own, so the cost of guessing
+   * wrong is a service that appears and then declines, rather than a home
+   * screen that silently loses half its tiles because one request failed.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    fetchFeatures(country)
+      .then((r) => { if (!cancelled) setFeatures(r?.features ?? null); })
+      .catch(() => { if (!cancelled) setFeatures(null); });
+    return () => { cancelled = true; };
+  }, [country]);
+
+  /** True unless the market has explicitly switched this off. */
+  const featureOn = React.useCallback((name) => features?.[name] !== false, [features]);
 
   /**
    * What this market will actually be charged.
@@ -606,6 +633,7 @@ function TopUp() {
           }}
           onVpn={() => setScreen(vpn ? 'vpn' : 'vpnPlans')}
           hasVpn={!!vpn}
+          featureOn={featureOn}
         />
       )}
 

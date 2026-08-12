@@ -62,7 +62,7 @@ export const apiGet = async <T>(path: string, params?: Params, signal?: AbortSig
     await fetch(`${BASE}${path}${qs(params)}`, { signal, cache: 'no-store', headers: authHeader() }),
   )) as T;
 
-export const apiSend = async <T>(method: 'POST' | 'PATCH', path: string, body: unknown): Promise<T> =>
+export const apiSend = async <T>(method: 'POST' | 'PATCH' | 'PUT', path: string, body: unknown): Promise<T> =>
   (await parse(
     await fetch(`${BASE}${path}`, {
       method,
@@ -72,6 +72,12 @@ export const apiSend = async <T>(method: 'POST' | 'PATCH', path: string, body: u
   )) as T;
 
 // ── row shapes returned by the worker ──────────────────────────────────────
+export type Flags = {
+  features: { name: string; label: string; default: boolean }[];
+  /** Only the markets that deviate; everything else follows the default. */
+  overrides: { feature: string; country: string; enabled: boolean; note: string | null; updated_at: number }[];
+};
+
 export type Stats = {
   revenue: number;
   /** Service fees kept out of turnover — what the business actually earns. */

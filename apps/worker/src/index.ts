@@ -7,6 +7,7 @@ import checkout from './checkout/routes';
 import vpn from './vpn/routes';
 import { sweep } from './vpn/sweep';
 import { reconcileDeliveries } from './delivery';
+import { featuresFor } from './features';
 import type { Env } from './env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -24,6 +25,13 @@ app.get('/catalogue', async (c) => c.json(await publicCatalogue(c.env, translato
 app.get('/esim/plans/:country', async (c) => {
   const country = decodeURIComponent(c.req.param('country'));
   return c.json({ country, plans: await esimPlansForCountry(c.env, country, translator(langOf(c))) });
+});
+
+// What is switched on in a given market. The app asks before drawing the home
+// screen so it never offers a service the backend would refuse.
+app.get('/features', async (c) => {
+  const country = (c.req.query('country') ?? '').toUpperCase();
+  return c.json({ country, features: await featuresFor(c.env, country) });
 });
 
 // Everything under /admin backs the console: dashboard, transactions,

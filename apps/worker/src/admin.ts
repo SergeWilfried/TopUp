@@ -29,6 +29,8 @@ import { ParamError, byNumber, byText, listQuery } from './query';
 import type { Env } from './env';
 import { currentUser, isStaff, type User } from './vpn/auth';
 
+import { ANY_COUNTRY, isFeature, listFlags, setFlag } from './features';
+
 const DAY = 86_400_000;
 const admin = new Hono<{ Bindings: Env; Variables: { staff: User } }>();
 
@@ -429,3 +431,37 @@ admin.post('/dev/seed', async (c) => {
 });
 
 export default admin;
+
+// ── feature flags ──────────────────────────────────────────────────────────
+
+/** Every switch, its default, and the overrides currently in force. */
+admin.get('/features', async (c) => c.json(await listFlags(c.env)));
+
+/**
+ * Flips one feature in one market.
+ *
+ * `enabled: null` removes the override so the market follows the default again.
+ * The feature name is checked against the catalogue in code: accepting an
+ * arbitrary string would store a switch that reads convincingly in the console
+ * and controls nothing.
+ */
+admin.put('/features/:feature/:country', async (c) => {
+  const feature = c.req.param('feature');
+  if (!isFeature(feature)) return c.json({ error: 'unknown_feature', field: 'feature' }, 400);
+
+  const raw = c.req.param('country');
+  const country = raw === ANY_COUNTRY ? ANY_COUNTRY : raw.toUpperCase();
+  if (country !== ANY_COUNTRY && !/^[A-Z]{2}$/.test(country)) {
+    return c.json({ error: 'bad_country', field: 'country' }, 400);
+  }
+
+  type FlagBody = { enabled?: boolean | null; note?: string };
+  const body = await c.req.json<FlagBody>().catch((): FlagBody => ({}));
+  if (body.enabled !== null && typeof body.enabled !== 'boolean') {
+    return c.json({ error: 'enabled_required', field: 'enabled' }, 400);
+  }
+
+  await setFlag(c.env, feature, country, body.enabled ?? null, body.note);
+  console.log(`[flags] ${feature}/${country} -> ${body.enabled} by ${c.get('staff').id}`);
+  return c.json(await listFlags(c.env));
+});

@@ -5,12 +5,15 @@ import { useTranslation } from 'react-i18next';
 import { Brand, EmptyState, Kicker, Tag, st } from '../ui';
 import { NoHistory } from '../illustrations';
 
-export default function HomeScreen({ points, history, deal, lastBuy, loading, onBuy, onDailyDeal, onRepeat, onVpn, hasVpn }) {
+export default function HomeScreen({ points, history, deal, lastBuy, loading, onBuy, onDailyDeal, onRepeat, onVpn, hasVpn, featureOn = () => true }) {
   const { t } = useTranslation();
+  // A market can have one of these switched off — a distributor out of float,
+  // an operator changing a bundle format. The worker refuses either way; hiding
+  // the tile is what stops a customer walking into the refusal.
   const TILES = [
     { k: '₣', l: t('home.airtime'), svc: 'airtime' },
     { k: 'GB', l: t('home.data'), svc: 'data' },
-  ];
+  ].filter((tile) => featureOn(tile.svc));
   return (
     <ScrollView style={{ flex: 1 }}>
       <View style={[st.header, st.rowBetween, { borderBottomWidth: 2, borderColor: C.divider }]}>
@@ -21,6 +24,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
       <View style={{ padding: 20 }}>
         <Kicker>{t('home.quickBuy')}</Kicker>
         <Text style={st.h1}>{t('home.title')}</Text>
+        {TILES.length > 0 && (
         <View style={{ flexDirection: 'row', borderWidth: 2, borderColor: C.text, marginTop: 20 }}>
           {TILES.map((tile, i) => (
             <Pressable
@@ -28,7 +32,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
               onPress={() => onBuy(tile.svc)}
               style={({ pressed }) => [
                 { flex: 1, padding: 16, gap: 22 },
-                i === 0 && { borderRightWidth: 2, borderColor: C.text },
+                i === 0 && TILES.length > 1 && { borderRightWidth: 2, borderColor: C.text },
                 pressed && { backgroundColor: C.accent100 },
               ]}
             >
@@ -40,6 +44,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
             </Pressable>
           ))}
         </View>
+        )}
       </View>
 
       {/* The whole point of the account. This is a utility bought a few times a
@@ -91,6 +96,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
         </Pressable>
       )}
 
+      {featureOn('vpn') && (
       <Pressable
         onPress={onVpn}
         style={({ pressed }) => [
@@ -109,6 +115,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
         </View>
         <Text style={st.arrow}>→</Text>
       </Pressable>
+      )}
 
       <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
         <View style={st.sectionRule}><Text style={st.sectionLabel}>{t('home.activity')}</Text></View>
