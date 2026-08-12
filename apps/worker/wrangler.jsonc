@@ -1,6 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "topup-api",
+
+  // Credentials live as dashboard variables rather than in this file — they
+  // were stripped from the repo after GitHub's push protection caught them.
+  // Without this, every deploy replaces the deployed vars with the (near empty)
+  // block below, silently taking out payments, SMS and the merchant codes that
+  // make dial-to-pay work at all.
+  "keep_vars": true,
   "main": "src/index.ts",
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat"],
