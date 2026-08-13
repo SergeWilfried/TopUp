@@ -84,12 +84,15 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           explaining — nobody searches for one unprompted — whereas a second is
           bought on the way to the airport without any encouragement, so this
           disappears the moment they own one. */}
+      {/* The margins sit on the tour target, not on the card: the wrapper is
+          what gets measured, and a full-width wrapper drew the highlight edge
+          to edge around a card that is inset by 20. */}
       {!deal && !hasEsim && featureOn('esim') && (
-        <TourTarget name="promo">
+        <TourTarget name="promo" style={{ marginHorizontal: 20, marginBottom: 20 }}>
         <Pressable
           onPress={onEsim}
           style={({ pressed }) => [
-            { marginHorizontal: 20, marginBottom: 20, backgroundColor: pressed ? C.accent600 : C.accent, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
+            { backgroundColor: pressed ? C.accent600 : C.accent, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
           ]}
         >
           <View style={{ flex: 1 }}>

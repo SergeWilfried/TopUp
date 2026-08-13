@@ -87,6 +87,9 @@ export function TourOverlay({ steps, visible, onDone }) {
   const [rect, setRect] = useState(null);
   // Steps confirmed present, resolved when the tour opens.
   const [live, setLive] = useState([]);
+  // Measured, not assumed. A fixed guess put a three-line tooltip on top of the
+  // very thing it was pointing at.
+  const [tipH, setTipH] = useState(0);
 
   const finish = useCallback(() => {
     setIndex(0);
@@ -133,10 +136,20 @@ export function TourOverlay({ steps, visible, onDone }) {
     });
   };
 
-  // Below the highlight when there is room, otherwise above. A tooltip that
-  // runs off the bottom is the usual failure of a fixed placement.
-  const below = rect.y + rect.height + GAP + 160 < screenH;
-  const top = below ? rect.y + rect.height + GAP : Math.max(24, rect.y - GAP - 160);
+  /**
+   * Below the highlight when it fits, otherwise above.
+   *
+   * A tall target — a whole section rather than a button — can leave too little
+   * room on either side, so the larger gap wins and the tooltip is clamped on
+   * screen. Overlapping the target is the last resort, never the default.
+   */
+  const h = tipH || 170;
+  const spaceBelow = screenH - (rect.y + rect.height + GAP);
+  const spaceAbove = rect.y - GAP;
+  const below = spaceBelow >= h + 16 || spaceBelow >= spaceAbove;
+  const top = below
+    ? Math.min(rect.y + rect.height + GAP, screenH - h - 16)
+    : Math.max(16, rect.y - GAP - h);
 
   const dim = { position: 'absolute', backgroundColor: 'rgba(32,30,29,0.82)' };
 
@@ -165,6 +178,10 @@ export function TourOverlay({ steps, visible, onDone }) {
         />
 
         <View
+          onLayout={(e) => {
+            const next = Math.round(e.nativeEvent.layout.height);
+            if (next && next !== tipH) setTipH(next);
+          }}
           style={{
             position: 'absolute',
             top,
