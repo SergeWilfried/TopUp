@@ -4,6 +4,7 @@ import { C, F, fmt, fmtN } from '@topup/core';
 import { useTranslation } from 'react-i18next';
 import { Brand, EmptyState, Kicker, Tag, st } from '../ui';
 import { NoHistory } from '../illustrations';
+import { TourTarget } from '../tour';
 
 export default function HomeScreen({ points, history, deal, lastBuy, loading, onBuy, onDailyDeal, onRepeat, onVpn, onEsim, hasVpn, hasEsim, featureOn = () => true }) {
   const { t } = useTranslation();
@@ -25,7 +26,8 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
         <Kicker>{t('home.quickBuy')}</Kicker>
         <Text style={st.h1}>{t('home.title')}</Text>
         {TILES.length > 0 && (
-        <View style={{ flexDirection: 'row', borderWidth: 2, borderColor: C.text, marginTop: 20 }}>
+        <TourTarget name="tiles" style={{ marginTop: 20 }}>
+        <View style={{ flexDirection: 'row', borderWidth: 2, borderColor: C.text }}>
           {TILES.map((tile, i) => (
             <Pressable
               key={tile.svc}
@@ -44,6 +46,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
             </Pressable>
           ))}
         </View>
+        </TourTarget>
         )}
       </View>
 
@@ -82,6 +85,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           bought on the way to the airport without any encouragement, so this
           disappears the moment they own one. */}
       {!deal && !hasEsim && featureOn('esim') && (
+        <TourTarget name="promo">
         <Pressable
           onPress={onEsim}
           style={({ pressed }) => [
@@ -99,6 +103,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           </View>
           <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 20 }}>→</Text>
         </Pressable>
+        </TourTarget>
       )}
 
       {deal && (
@@ -142,6 +147,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
       </Pressable>
       )}
 
+      <TourTarget name="activity">
       <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
         <View style={st.sectionRule}><Text style={st.sectionLabel}>{t('home.activity')}</Text></View>
         {/* Compact here — the home screen already offers the ways out, so this
@@ -159,6 +165,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           </View>
         ))}
       </View>
+      </TourTarget>
     </ScrollView>
   );
 }

@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import './i18n';
 import { loadStoredLanguage } from './i18n';
 
+import { TourOverlay, TourProvider, TourTarget } from './tour';
 import { C, F, fmt, fmtN, CARRIERS, countryFromCanonical, detect, flagFor, navItems, networksFor, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
 import {
   ApiError,
@@ -60,6 +61,7 @@ const VPN_ADDED_STORE = 'topup.vpn.added';
  * survives a signed-out session.
  */
 const LAST_BUY_STORE = 'topup.lastBuy';
+const SEEN_TOUR_STORE = 'topup.seenTour';
 
 /**
  * Where the country pickers start.
@@ -146,6 +148,10 @@ function TopUp() {
   const [dialable, setDialable] = useState([]); // wallets payable by dialling
   const [lastBuy, setLastBuy] = useState(null); // the repeatable purchase
   const [copiedUssd, setCopiedUssd] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  // Null until the stored flag has been read, so the tour cannot flash open for
+  // someone who has already seen it while AsyncStorage is still resolving.
+  const [seenTour, setSeenTour] = useState(null);
 
   const reloadCatalogue = React.useCallback(async () => {
     setCatFailed(false);
@@ -207,6 +213,26 @@ function TopUp() {
       .catch(() => { if (!cancelled) setFeatures(null); });
     return () => { cancelled = true; };
   }, [country]);
+
+  /**
+   * Opens the tour once, the first time the home screen has something to show.
+   *
+   * Waited on the catalogue rather than fired on mount: the steps are measured
+   * against real views, and pointing at a screen that is still loading measures
+   * a skeleton — or nothing at all, which drops every step and teaches no one.
+   */
+  useEffect(() => {
+    if (seenTour !== false || screen !== 'home' || !cat) return;
+    // One frame after paint, so the tiles have been laid out and can be found.
+    const id = setTimeout(() => setTourOpen(true), 350);
+    return () => clearTimeout(id);
+  }, [seenTour, screen, cat]);
+
+  const endTour = React.useCallback(() => {
+    setTourOpen(false);
+    setSeenTour(true);
+    AsyncStorage.setItem(SEEN_TOUR_STORE, '1').catch(() => {});
+  }, []);
 
   /** True unless the market has explicitly switched this off. */
   const featureOn = React.useCallback((name) => features?.[name] !== false, [features]);
@@ -272,7 +298,7 @@ function TopUp() {
     const lang = i18n.language?.slice(0, 2) || 'en';
     Promise.all([
       loadStoredLanguage(),
-      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE, LAST_BUY_STORE]).catch(() => []),
+      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE, LAST_BUY_STORE, SEEN_TOUR_STORE]).catch(() => []),
       loadSession().catch(() => null),
       fetchCatalogue(lang).catch(() => null),
       vpnServers().catch(() => null),
@@ -283,6 +309,7 @@ function TopUp() {
       try {
         setVpnAdded(JSON.parse(stored[VPN_ADDED_STORE] || '[]'));
         if (stored[LAST_BUY_STORE]) setLastBuy(JSON.parse(stored[LAST_BUY_STORE]));
+        setSeenTour(Boolean(stored[SEEN_TOUR_STORE]));
       } catch {
         // Corrupt record — start clean rather than block launch.
       }
@@ -1159,7 +1186,26 @@ function TopUp() {
         </ScrollView>
       )}
 
-      {showNav && <TabBar items={navItems(t)} value={screen} onChange={setScreen} insetBottom={insets.bottom} />}
+      {showNav && (
+        <TourTarget name="nav">
+          <TabBar items={navItems(t)} value={screen} onChange={setScreen} insetBottom={insets.bottom} />
+        </TourTarget>
+      )}
+
+      {/* Steps are declared here, next to the screen they explain, and resolved
+          against whatever is actually on screen — a step whose target is absent
+          is dropped, so a market with a feature switched off is not shown a
+          spotlight on empty space. */}
+      <TourOverlay
+        visible={tourOpen}
+        onDone={endTour}
+        steps={[
+          { name: 'tiles', title: t('tour.tilesTitle'), body: t('tour.tilesBody') },
+          { name: 'promo', title: t('tour.promoTitle'), body: t('tour.promoBody') },
+          { name: 'activity', title: t('tour.activityTitle'), body: t('tour.activityBody') },
+          { name: 'nav', title: t('tour.navTitle'), body: t('tour.navBody') },
+        ]}
+      />
     </View>
   );
 }
@@ -1167,7 +1213,9 @@ function TopUp() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <TopUp />
+      <TourProvider>
+        <TopUp />
+      </TourProvider>
     </SafeAreaProvider>
   );
 }

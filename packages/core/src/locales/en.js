@@ -103,6 +103,20 @@ export default {
     verifyCta: 'VERIFY →',
   },
 
+  tour: {
+    progress: 'STEP {{current}} OF {{total}}',
+    next: 'NEXT',
+    done: 'GOT IT',
+    skip: 'Skip',
+    tilesTitle: 'Buy credit or data',
+    tilesBody: 'Top up your own line or someone else\u2019s. Pick the network, pick an amount, pay with mobile money.',
+    promoTitle: 'Travelling abroad',
+    promoBody: 'An eSIM gives you data in another country without changing your SIM or paying roaming.',
+    activityTitle: 'Every purchase, tracked',
+    activityBody: 'See what was sent, to which number, and whether it arrived. Nothing is charged until delivery is confirmed.',
+    navTitle: 'Find your way',
+    navBody: 'History for past top-ups, Points for what you have earned, Profile for your number and language.',
+  },
   home: {
     usualKicker: 'Your usual',
     usualTitle: '{{pack}} · {{price}}',

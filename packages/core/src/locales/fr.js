@@ -103,6 +103,20 @@ export default {
     verifyCta: 'VÉRIFIER →',
   },
 
+  tour: {
+    progress: '\u00c9TAPE {{current}} SUR {{total}}',
+    next: 'SUIVANT',
+    done: 'J\u2019AI COMPRIS',
+    skip: 'Passer',
+    tilesTitle: 'Achetez du cr\u00e9dit ou de la data',
+    tilesBody: 'Rechargez votre ligne ou celle d\u2019un proche. Choisissez le r\u00e9seau, le montant, puis payez par mobile money.',
+    promoTitle: 'En voyage \u00e0 l\u2019\u00e9tranger',
+    promoBody: 'Une eSIM vous donne de la data dans un autre pays sans changer de SIM ni payer l\u2019itin\u00e9rance.',
+    activityTitle: 'Chaque achat, suivi',
+    activityBody: 'Voyez ce qui a \u00e9t\u00e9 envoy\u00e9, \u00e0 quel num\u00e9ro, et si c\u2019est arriv\u00e9. Rien n\u2019est d\u00e9bit\u00e9 avant confirmation.',
+    navTitle: 'Rep\u00e9rez-vous',
+    navBody: 'Historique pour vos recharges, Points pour vos gains, Profil pour votre num\u00e9ro et la langue.',
+  },
   home: {
     usualKicker: 'Votre habituel',
     usualTitle: '{{pack}} · {{price}}',
