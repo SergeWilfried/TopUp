@@ -11,7 +11,8 @@
       "backgroundColor": "#ec3013"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "app.tofee.topup"
     },
     "android": {
       "package": "app.tofee.topup",

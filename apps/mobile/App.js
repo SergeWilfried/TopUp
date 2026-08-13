@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import './i18n';
 import { loadStoredLanguage } from './i18n';
 
-import { TourOverlay, TourProvider, TourTarget } from './tour';
+import { TOURS, TourOverlay, TourProvider, TourTarget, tourFor, tourStoreKey } from './tour';
 import { C, F, fmt, fmtN, CARRIERS, countryFromCanonical, detect, flagFor, navItems, networksFor, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
 import {
   ApiError,
@@ -61,7 +61,6 @@ const VPN_ADDED_STORE = 'topup.vpn.added';
  * survives a signed-out session.
  */
 const LAST_BUY_STORE = 'topup.lastBuy';
-const SEEN_TOUR_STORE = 'topup.seenTour';
 
 /**
  * Where the country pickers start.
@@ -148,10 +147,11 @@ function TopUp() {
   const [dialable, setDialable] = useState([]); // wallets payable by dialling
   const [lastBuy, setLastBuy] = useState(null); // the repeatable purchase
   const [copiedUssd, setCopiedUssd] = useState(false);
-  const [tourOpen, setTourOpen] = useState(false);
-  // Null until the stored flag has been read, so the tour cannot flash open for
-  // someone who has already seen it while AsyncStorage is still resolving.
-  const [seenTour, setSeenTour] = useState(null);
+  // Which tour is running, and which have been finished. `seenTours` is null
+  // until storage resolves, so a tour cannot flash open for someone who has
+  // already dismissed it.
+  const [tourOpen, setTourOpen] = useState(null);
+  const [seenTours, setSeenTours] = useState(null);
 
   const reloadCatalogue = React.useCallback(async () => {
     setCatFailed(false);
@@ -215,23 +215,31 @@ function TopUp() {
   }, [country]);
 
   /**
-   * Opens the tour once, the first time the home screen has something to show.
+   * Opens a feature's tour the first time that feature is used.
    *
-   * Waited on the catalogue rather than fired on mount: the steps are measured
-   * against real views, and pointing at a screen that is still loading measures
-   * a skeleton — or nothing at all, which drops every step and teaches no one.
+   * At the point of the task, not at first launch: someone opening the airtime
+   * form has a question about this form, which is exactly when an explanation
+   * is worth reading and exactly when it is remembered.
+   *
+   * Delayed a beat because steps are measured against real views — pointing at
+   * a screen mid-transition measures nothing and drops every step.
    */
   useEffect(() => {
-    if (seenTour !== false || screen !== 'home' || !cat) return;
-    // One frame after paint, so the tiles have been laid out and can be found.
-    const id = setTimeout(() => setTourOpen(true), 350);
+    if (!seenTours) return;
+    const name = tourFor(screen, service);
+    if (!name || seenTours[name]) return;
+    const id = setTimeout(() => setTourOpen(name), 350);
     return () => clearTimeout(id);
-  }, [seenTour, screen, cat]);
+  }, [seenTours, screen, service]);
 
   const endTour = React.useCallback(() => {
-    setTourOpen(false);
-    setSeenTour(true);
-    AsyncStorage.setItem(SEEN_TOUR_STORE, '1').catch(() => {});
+    setTourOpen((name) => {
+      if (name) {
+        setSeenTours((prev) => ({ ...prev, [name]: true }));
+        AsyncStorage.setItem(tourStoreKey(name), '1').catch(() => {});
+      }
+      return null;
+    });
   }, []);
 
   /** True unless the market has explicitly switched this off. */
@@ -298,7 +306,7 @@ function TopUp() {
     const lang = i18n.language?.slice(0, 2) || 'en';
     Promise.all([
       loadStoredLanguage(),
-      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE, LAST_BUY_STORE, SEEN_TOUR_STORE]).catch(() => []),
+      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE, LAST_BUY_STORE, ...Object.keys(TOURS).map(tourStoreKey)]).catch(() => []),
       loadSession().catch(() => null),
       fetchCatalogue(lang).catch(() => null),
       vpnServers().catch(() => null),
@@ -309,7 +317,9 @@ function TopUp() {
       try {
         setVpnAdded(JSON.parse(stored[VPN_ADDED_STORE] || '[]'));
         if (stored[LAST_BUY_STORE]) setLastBuy(JSON.parse(stored[LAST_BUY_STORE]));
-        setSeenTour(Boolean(stored[SEEN_TOUR_STORE]));
+        setSeenTours(
+          Object.fromEntries(Object.keys(TOURS).map((n) => [n, Boolean(stored[tourStoreKey(n)])])),
+        );
       } catch {
         // Corrupt record — start clean rather than block launch.
       }
@@ -697,12 +707,14 @@ function TopUp() {
           <BackHeader onBack={() => setScreen('home')} label={t('recipient.step')} />
           <View style={{ padding: 20, gap: 20 }}>
             <Text style={st.h2}>{t('recipient.title')}</Text>
-            <Toggle2
-              opts={[{ label: t('recipient.forMyself'), val: true }, { label: t('recipient.someoneElse'), val: false }]}
-              value={forSelf}
-              onChange={(v) => { setForSelf(v); setPhone(v ? myNumber : ''); }}
-            />
-            <View>
+            <TourTarget name="who">
+              <Toggle2
+                opts={[{ label: t('recipient.forMyself'), val: true }, { label: t('recipient.someoneElse'), val: false }]}
+                value={forSelf}
+                onChange={(v) => { setForSelf(v); setPhone(v ? myNumber : ''); }}
+              />
+            </TourTarget>
+            <TourTarget name="number">
               <Text style={st.fieldLabel}>{t('auth.phoneLabel')}</Text>
               {/* The recipient can be in another country — a top-up sent home
                   from abroad — so this picker is the delivery country and is
@@ -714,8 +726,8 @@ function TopUp() {
                 onCountryChange={setRecipientCountry}
                 placeholder={t('auth.phonePlaceholder')}
               />
-            </View>
-            <View>
+            </TourTarget>
+            <TourTarget name="network">
               <Text style={st.fieldLabel}>{t('recipient.networkLabel')}{detect(phone) ? <Text style={{ color: C.accent }}>{t('recipient.detectedSuffix')}</Text> : null}</Text>
               {/* Networks follow the recipient's country. These used to be the
                   three Ivorian carriers with Ivorian prefix hints regardless,
@@ -732,7 +744,7 @@ function TopUp() {
                   </Pressable>
                 ))}
               </View>
-            </View>
+            </TourTarget>
             <Btn label={t('common.continue')} disabled={digits.length < 8} onPress={() => setScreen('packs')} />
           </View>
         </ScrollView>
@@ -1080,8 +1092,9 @@ function TopUp() {
                 onCta={() => { setCountrySearch(''); setScreen('esimCountry'); }}
               />
             ) : null}
-            {esims.map((e) => (
-              <View key={e.id} style={{ borderWidth: 2, borderColor: C.text, padding: 14, gap: 10 }}>
+            {esims.map((e, i) => (
+              <TourTarget key={e.id} name={i === 0 ? 'profile' : `esim-${e.id}`}>
+              <View style={{ borderWidth: 2, borderColor: C.text, padding: 14, gap: 10 }}>
                 <View style={st.rowBetween}>
                   <Text style={{ fontFamily: F.heading, fontSize: 16, color: C.text }}>{e.label}</Text>
                   <Tag kind={e.status === 'active' ? 'accent' : 'neutral'}>{e.status === 'active' ? t('common.active') : t('common.paused')}</Tag>
@@ -1100,6 +1113,7 @@ function TopUp() {
                   </View>
                 </View>
               </View>
+              </TourTarget>
             ))}
             <Text style={st.subText}>{t('esim.note')}</Text>
           </View>
@@ -1112,7 +1126,9 @@ function TopUp() {
           <View style={{ padding: 20 }}>
             <Text style={st.h2}>{t('esim.destinationTitle')}</Text>
             <Text style={[st.subText, { marginBottom: 14 }]}>{t('esim.destinationSub')}</Text>
-            <TextInput style={[st.input, { marginBottom: 14 }]} value={countrySearch} onChangeText={setCountrySearch} placeholder={t('esim.searchPlaceholder')} />
+            <TourTarget name="destination" style={{ marginBottom: 14 }}>
+              <TextInput style={st.input} value={countrySearch} onChangeText={setCountrySearch} placeholder={t('esim.searchPlaceholder')} />
+            </TourTarget>
             {(() => {
               const shown = (cat?.esimDestinations ?? []).filter((c) =>
                 c.name.toLowerCase().includes(countrySearch.trim().toLowerCase()),
@@ -1186,25 +1202,19 @@ function TopUp() {
         </ScrollView>
       )}
 
-      {showNav && (
-        <TourTarget name="nav">
-          <TabBar items={navItems(t)} value={screen} onChange={setScreen} insetBottom={insets.bottom} />
-        </TourTarget>
-      )}
+      {showNav && <TabBar items={navItems(t)} value={screen} onChange={setScreen} insetBottom={insets.bottom} />}
 
-      {/* Steps are declared here, next to the screen they explain, and resolved
-          against whatever is actually on screen — a step whose target is absent
-          is dropped, so a market with a feature switched off is not shown a
-          spotlight on empty space. */}
+      {/* Copy is looked up per tour and step, so adding a step is a target name
+          and two keys rather than another branch here. Steps whose target is
+          not on screen are dropped when the tour resolves. */}
       <TourOverlay
-        visible={tourOpen}
+        visible={Boolean(tourOpen)}
         onDone={endTour}
-        steps={[
-          { name: 'tiles', title: t('tour.tilesTitle'), body: t('tour.tilesBody') },
-          { name: 'promo', title: t('tour.promoTitle'), body: t('tour.promoBody') },
-          { name: 'activity', title: t('tour.activityTitle'), body: t('tour.activityBody') },
-          { name: 'nav', title: t('tour.navTitle'), body: t('tour.navBody') },
-        ]}
+        steps={(tourOpen ? TOURS[tourOpen].steps : []).map((step) => ({
+          name: step,
+          title: t(`tour.${tourOpen}.${step}Title`),
+          body: t(`tour.${tourOpen}.${step}Body`),
+        }))}
       />
     </View>
   );

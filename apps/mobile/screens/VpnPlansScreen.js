@@ -3,6 +3,7 @@ import { View, Text, ScrollView } from 'react-native';
 import { C, F } from '@topup/core';
 import { useTranslation } from 'react-i18next';
 import { BackHeader, Btn, Kicker, PackGrid, st } from '../ui';
+import { TourTarget } from '../tour';
 
 // Plans and locations are both server-side facts: the console can reprice or
 // retire either at any time, and checkout charges the stored price regardless
@@ -24,12 +25,14 @@ export default function VpnPlansScreen({ plans = [], locations = [], onBack, onS
       </View>
 
       <View style={{ padding: 20, gap: 16 }}>
-        <PackGrid
-          items={plans}
-          onSelect={onSelect}
-          title={t('empty.packsTitle')}
-          body={t('empty.packsBody')}
-        />
+        <TourTarget name="plans">
+          <PackGrid
+            items={plans}
+            onSelect={onSelect}
+            title={t('empty.packsTitle')}
+            body={t('empty.packsBody')}
+          />
+        </TourTarget>
 
         {/* Nothing to include yet — the card would otherwise read "0
             destinations" above an empty line. */}

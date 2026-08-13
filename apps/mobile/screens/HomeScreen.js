@@ -4,7 +4,6 @@ import { C, F, fmt, fmtN } from '@topup/core';
 import { useTranslation } from 'react-i18next';
 import { Brand, EmptyState, Kicker, Tag, st } from '../ui';
 import { NoHistory } from '../illustrations';
-import { TourTarget } from '../tour';
 
 export default function HomeScreen({ points, history, deal, lastBuy, loading, onBuy, onDailyDeal, onRepeat, onVpn, onEsim, hasVpn, hasEsim, featureOn = () => true }) {
   const { t } = useTranslation();
@@ -26,8 +25,7 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
         <Kicker>{t('home.quickBuy')}</Kicker>
         <Text style={st.h1}>{t('home.title')}</Text>
         {TILES.length > 0 && (
-        <TourTarget name="tiles" style={{ marginTop: 20 }}>
-        <View style={{ flexDirection: 'row', borderWidth: 2, borderColor: C.text }}>
+        <View style={{ flexDirection: 'row', borderWidth: 2, borderColor: C.text, marginTop: 20 }}>
           {TILES.map((tile, i) => (
             <Pressable
               key={tile.svc}
@@ -46,7 +44,6 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
             </Pressable>
           ))}
         </View>
-        </TourTarget>
         )}
       </View>
 
@@ -84,15 +81,11 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           explaining — nobody searches for one unprompted — whereas a second is
           bought on the way to the airport without any encouragement, so this
           disappears the moment they own one. */}
-      {/* The margins sit on the tour target, not on the card: the wrapper is
-          what gets measured, and a full-width wrapper drew the highlight edge
-          to edge around a card that is inset by 20. */}
       {!deal && !hasEsim && featureOn('esim') && (
-        <TourTarget name="promo" style={{ marginHorizontal: 20, marginBottom: 20 }}>
         <Pressable
           onPress={onEsim}
           style={({ pressed }) => [
-            { backgroundColor: pressed ? C.accent600 : C.accent, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
+            { marginHorizontal: 20, marginBottom: 20, backgroundColor: pressed ? C.accent600 : C.accent, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
           ]}
         >
           <View style={{ flex: 1 }}>
@@ -106,7 +99,6 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           </View>
           <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 20 }}>→</Text>
         </Pressable>
-        </TourTarget>
       )}
 
       {deal && (
@@ -150,7 +142,6 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
       </Pressable>
       )}
 
-      <TourTarget name="activity">
       <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
         <View style={st.sectionRule}><Text style={st.sectionLabel}>{t('home.activity')}</Text></View>
         {/* Compact here — the home screen already offers the ways out, so this
@@ -168,7 +159,6 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           </View>
         ))}
       </View>
-      </TourTarget>
     </ScrollView>
   );
 }

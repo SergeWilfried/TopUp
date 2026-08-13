@@ -17,6 +17,40 @@ import { C, F } from '@topup/core';
  * drifting off whatever it was aligned to on one handset.
  */
 
+/**
+ * The tours, one per thing a customer has to learn.
+ *
+ * Keyed by feature rather than by screen: "buying airtime" is the unit a person
+ * understands, and it is what the app switches on and off. A single tour of the
+ * home screen taught the furniture instead of the task, and fired at the one
+ * moment nobody has a question yet.
+ *
+ * Steps name targets on the screen the tour opens on. Anything missing is
+ * dropped when the tour resolves, so a flow that renders differently in one
+ * market simply teaches fewer steps.
+ */
+export const TOURS = {
+  airtime: { screen: 'recipient', service: 'airtime', steps: ['who', 'number', 'network'] },
+  data: { screen: 'recipient', service: 'data', steps: ['who', 'number', 'network'] },
+  esim: { screen: 'esimCountry', steps: ['destination'] },
+  esimSetup: { screen: 'esim', steps: ['profile'] },
+  vpn: { screen: 'vpnPlans', steps: ['plans'] },
+};
+
+/** One flag per tour: finishing the airtime tour must not silence the eSIM one. */
+export const tourStoreKey = (name) => `topup.seenTour.${name}`;
+
+/**
+ * The tour that should run for the current screen, or null.
+ *
+ * `service` disambiguates the two that share a screen — airtime and data are
+ * bought through the same form and differ only in what is being explained.
+ */
+export const tourFor = (screen, service) =>
+  Object.keys(TOURS).find(
+    (name) => TOURS[name].screen === screen && (!TOURS[name].service || TOURS[name].service === service),
+  ) ?? null;
+
 const TourContext = createContext(null);
 
 /**
@@ -98,6 +132,11 @@ export function TourOverlay({ steps, visible, onDone }) {
     onDone?.();
   }, [onDone]);
 
+  // Identity of the step list, not the array itself. Callers build `steps` with
+  // a map on every render, and depending on the array would re-measure — and
+  // re-render — without end.
+  const stepKey = steps.map((x) => x.name).join('|');
+
   // Resolve which steps actually have something to point at, once per opening.
   React.useEffect(() => {
     if (!visible) return;
@@ -117,7 +156,8 @@ export function TourOverlay({ steps, visible, onDone }) {
     return () => {
       cancelled = true;
     };
-  }, [visible, steps, ctx, finish]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, stepKey, ctx, finish]);
 
   if (!visible || live.length === 0 || !rect) return null;
 
