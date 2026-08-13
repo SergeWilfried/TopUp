@@ -136,6 +136,12 @@ export default {
       plansTitle: 'Choose how long you need it',
       plansBody: 'A private connection for browsing and calls. Longer plans cost less per day.',
     },
+    payment: {
+      totalTitle: 'What you pay, and what arrives',
+      totalBody: 'The recipient gets the pack price. Our service fee is listed separately, so the figures add up to the total.',
+      methodTitle: 'How you pay',
+      methodBody: 'Dial a code on your own phone, or approve a prompt sent to your wallet. Both take the same amount.',
+    },
   },
   home: {
     usualKicker: 'Your usual',

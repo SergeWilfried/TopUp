@@ -136,6 +136,12 @@ export default {
       plansTitle: 'Choisissez la durée',
       plansBody: 'Une connexion privée pour naviguer et appeler. Les forfaits longs coûtent moins par jour.',
     },
+    payment: {
+      totalTitle: 'Ce que vous payez, ce qui arrive',
+      totalBody: 'Le destinataire reçoit le montant du forfait. Nos frais de service sont indiqués à part : le compte est juste.',
+      methodTitle: 'Comment payer',
+      methodBody: 'Composez un code sur votre téléphone, ou validez une demande envoyée à votre portefeuille. Le montant est le même.',
+    },
   },
   home: {
     usualKicker: 'Votre habituel',

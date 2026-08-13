@@ -35,6 +35,16 @@ export const TOURS = {
   esim: { screen: 'esimCountry', steps: ['destination'] },
   esimSetup: { screen: 'esim', steps: ['profile'] },
   vpn: { screen: 'vpnPlans', steps: ['plans'] },
+  /**
+   * Shared by every purchase, because the pay screen is the same one whatever
+   * got you there — and it is where the two questions people actually ask
+   * live: why the total is not the price, and which of these rails to use.
+   *
+   * The dial panel is deliberately not a step. It only exists after the order
+   * starts, by which point the tour has closed, and it already carries its own
+   * three lines of instruction.
+   */
+  payment: { screen: 'pay', steps: ['total', 'method'] },
 };
 
 /** One flag per tour: finishing the airtime tour must not silence the eSIM one. */

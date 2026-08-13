@@ -897,6 +897,7 @@ function TopUp() {
         <ScrollView style={{ flex: 1 }}>
           <BackHeader onBack={() => setScreen(isVpn ? 'vpnPlans' : service === 'esim' ? 'esimPlans' : 'packs')} label={t('pay.step')} />
           <View style={{ padding: 20, gap: 18 }}>
+            <TourTarget name="total">
             <View style={{ borderWidth: 2, borderColor: C.text, padding: 16 }}>
               <Kicker>{t('pay.summary')}</Kicker>
               <SummaryRow k={t('pay.to')} v={isVpn ? t('pay.vpnSubscription') : service === 'esim' ? t('pay.newEsim') : (forSelf ? t('pay.myNumber') : '') + phone} />
@@ -926,6 +927,7 @@ function TopUp() {
                 <SummaryRow k={t('pay.converted')} v={fmt(quote.amountXof)} />
               )}
             </View>
+            </TourTarget>
 
             {isVpn && (
               <View>
@@ -944,7 +946,7 @@ function TopUp() {
                 </Text>
               </View>
             )}
-            <View style={{ gap: 8 }}>
+            <TourTarget name="method" style={{ gap: 8 }}>
               <Text style={st.fieldLabel}>{t('pay.payWith')}</Text>
               {payment.methods
                 .map((m) => ({
@@ -969,7 +971,7 @@ function TopUp() {
               {!payment.supported && (
                 <Text style={st.subText}>{t('pay.unsupportedRegion', { country })}</Text>
               )}
-            </View>
+            </TourTarget>
             <Text style={st.subText}>{t('pay.earn', { count: earnPts })}</Text>
 
             {/* PawaPay pushes an approval prompt to the handset — there is no
