@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Brand, EmptyState, Kicker, Tag, st } from '../ui';
 import { NoHistory } from '../illustrations';
 
-export default function HomeScreen({ points, history, deal, lastBuy, loading, onBuy, onDailyDeal, onRepeat, onVpn, hasVpn, featureOn = () => true }) {
+export default function HomeScreen({ points, history, deal, lastBuy, loading, onBuy, onDailyDeal, onRepeat, onVpn, onEsim, hasVpn, hasEsim, featureOn = () => true }) {
   const { t } = useTranslation();
   // A market can have one of these switched off — a distributor out of float,
   // an operator changing a bundle format. The worker refuses either way; hiding
@@ -76,6 +76,31 @@ export default function HomeScreen({ points, history, deal, lastBuy, loading, on
           fixed "2 Go pour 800 FCFA" while the button charged whichever pack
           carried a bonus — advertising one price and taking another. There is
           no former price in the catalogue, so none is shown. */}
+      {/* The same slot promotes an eSIM when there is no genuine data offer and
+          the customer has none yet. A first eSIM is the purchase that needs
+          explaining — nobody searches for one unprompted — whereas a second is
+          bought on the way to the airport without any encouragement, so this
+          disappears the moment they own one. */}
+      {!deal && !hasEsim && featureOn('esim') && (
+        <Pressable
+          onPress={onEsim}
+          style={({ pressed }) => [
+            { marginHorizontal: 20, marginBottom: 20, backgroundColor: pressed ? C.accent600 : C.accent, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <Kicker light>{t('home.esimPromoKicker')}</Kicker>
+            <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 18 }}>
+              {t('home.esimPromoTitle')}
+            </Text>
+            <Text style={{ color: 'rgba(243,242,242,0.85)', fontSize: 12, fontFamily: F.body }}>
+              {t('home.esimPromoSub')}
+            </Text>
+          </View>
+          <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 20 }}>→</Text>
+        </Pressable>
+      )}
+
       {deal && (
         <Pressable
           onPress={onDailyDeal}

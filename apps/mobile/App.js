@@ -635,7 +635,11 @@ function TopUp() {
             setScreen('pay');
           }}
           onVpn={() => setScreen(vpn ? 'vpn' : 'vpnPlans')}
+          // Straight to picking a destination: the promo exists to start that
+          // choice, and the list screen would be empty for someone with none.
+          onEsim={() => { setCountrySearch(''); setScreen('esimCountry'); }}
           hasVpn={!!vpn}
+          hasEsim={esims.length > 0}
           featureOn={featureOn}
         />
       )}
