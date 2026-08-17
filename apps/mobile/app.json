@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TOPUP",
-    "slug": "topup-app",
+    "slug": "topup",
     "version": "1.0.0",
     "icon": "./app-icons/ios/AppIcon-1024.png",
     "orientation": "portrait",
@@ -12,7 +12,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.tofee.topup"
+      "bundleIdentifier": "app.tofee.topup",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "app.tofee.topup",
@@ -27,6 +30,12 @@
       "expo-font",
       "expo-localization",
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f12a7648-9f78-4057-9c52-58dca6149418"
+      }
+    },
+    "owner": "labo-progiciel"
   }
 }

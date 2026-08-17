@@ -1,0 +1,29 @@
+name: Internal Preview Builds
+
+# Trigger on push or PR to develop
+on:
+  push:
+    branches: ['develop']
+  pull_request:
+    branches: ['develop']
+
+jobs:
+  # Build both platforms for internal testing
+  build_android_preview:
+    name: Build Android Preview
+    type: build
+    params:
+      platform: android
+      profile: preview
+      message: "Preview build from ${{ github.ref_name }}"
+
+  build_ios_preview:
+    name: Build iOS Preview
+    type: build
+    params:
+      platform: ios
+      profile: preview
+      refresh_ad_hoc_provisioning_profile: true
+      message: "Preview build from ${{ github.ref_name }}"
+
+

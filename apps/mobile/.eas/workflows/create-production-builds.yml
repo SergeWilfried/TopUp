@@ -1,0 +1,40 @@
+name: Create Production Builds
+
+# Auto-trigger on push to main — no manual runs needed
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  # Build both platforms in parallel
+  build_android:
+    name: Build Android
+    type: build
+    params:
+      platform: android
+      profile: production
+
+  build_ios:
+    name: Build iOS
+    type: build
+    params:
+      platform: ios
+      profile: production
+
+  # Auto-submit to Play Store after Android build
+  submit_android:
+    name: Submit to Play Store
+    type: submit
+    needs: [build_android]
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
+      profile: production
+
+  # Auto-submit to App Store after iOS build
+  submit_ios:
+    name: Submit to App Store
+    type: submit
+    needs: [build_ios]
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: production
