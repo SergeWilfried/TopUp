@@ -8,6 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
+import * as Device from 'expo-device';
 import { useFonts, Archivo_400Regular, Archivo_600SemiBold, Archivo_800ExtraBold } from '@expo-google-fonts/archivo';
 import { useTranslation } from 'react-i18next';
 import './i18n';
@@ -32,6 +33,7 @@ import {
   vpnServers,
   waitForOrder,
   paymentMethods,
+  reportDevice,
 } from './api';
 import { detectCountry, deviceCountry, formatMoney, methodsFor } from './payment';
 import { hasWhatsApp, openEmail, openWhatsApp, SUPPORT_EMAIL } from './support';
@@ -77,6 +79,16 @@ const LAST_BUY_STORE = 'topup.lastBuy';
  * since it belongs to the account, not the handset.
  */
 const MY_CARRIER_STORE = 'topup.myCarrier';
+
+/**
+ * A random id for this install, generated once and joined to nothing.
+ *
+ * It exists so a handset reported twice counts once — without it the device
+ * census would measure app launches, not phones. Deliberately not the msisdn,
+ * the account, or an advertising identifier: the question is what hardware
+ * this market carries, and that needs no one's identity to answer.
+ */
+const INSTALL_ID_KEY = 'topup.installId';
 
 /**
  * Where the country pickers start.
@@ -193,6 +205,13 @@ function TopUp() {
   // genuinely has no plans is not the same as one still loading, and inferring
   // it left an empty list spinning for ever.
   const [esimPlansLoading, setEsimPlansLoading] = useState(false);
+  /**
+   * Whether this handset can hold an eSIM: 'supported', 'unknown', or null
+   * while unasked. Never 'unsupported' — the provider publishes the models it
+   * installs onto, not a register of every phone that has an eUICC, so a miss
+   * is unproven rather than disproven. The screens say so honestly.
+   */
+  const [esimCapable, setEsimCapable] = useState(null);
   const [payError, setPayError] = useState(null);
   const [order, setOrder] = useState(null); // in-flight purchase
   /**
@@ -279,6 +298,42 @@ function TopUp() {
     fetchFeatures(country)
       .then((r) => { if (!cancelled) setFeatures(r?.features ?? null); })
       .catch(() => { if (!cancelled) setFeatures(null); });
+    return () => { cancelled = true; };
+  }, [country]);
+
+  /**
+   * Reports the handset once, at boot.
+   *
+   * Two answers for one request. Ours: what share of the base can take an
+   * eSIM — a number no provider can give us, and the one that says whether an
+   * eSIM corridor is a market or a rounding error. The customer's: whether
+   * *this* phone can install one, which the eSIM screens need before taking
+   * money for a QR code that might not install.
+   *
+   * The install id is generated here and tied to nothing — no number, no
+   * account. Every failure is swallowed: a boot must not depend on telemetry.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let installId = await AsyncStorage.getItem(INSTALL_ID_KEY).catch(() => null);
+      if (!installId) {
+        installId = `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+        await AsyncStorage.setItem(INSTALL_ID_KEY, installId).catch(() => {});
+      }
+      const r = await reportDevice({
+        installId,
+        brand: Device.brand ?? undefined,
+        // The market name where the platform has one. Android reports a part
+        // number here ("SM-A536B"), which will not match a catalogue written
+        // in marketing names — hence 'unknown' rather than a false negative.
+        model: Device.modelName ?? undefined,
+        osName: Device.osName ?? undefined,
+        osVersion: Device.osVersion ?? undefined,
+        country,
+      }).catch(() => null);
+      if (!cancelled && r?.esim) setEsimCapable(r.esim);
+    })();
     return () => { cancelled = true; };
   }, [country]);
 
@@ -1683,6 +1738,24 @@ function TopUp() {
               <Tag kind="neutral">{esimCountry}</Tag>
             </View>
             <Text style={[st.subText, { marginBottom: 16 }]}>{t('esim.plansSub')}</Text>
+            {/* Placed above the plans, not beside the pay button: the moment
+                to learn a phone cannot take an eSIM is before choosing one,
+                not after entering a PIN. Never a blocker — the list is the
+                provider's, and a phone missing from it is unproven, not
+                proven incapable. */}
+            {esimCapable === 'supported' ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Text style={{ fontFamily: F.heading, fontSize: 12, color: C.text }}>✓</Text>
+                <Text style={st.subText}>{t('esim.compatOk')}</Text>
+              </View>
+            ) : esimCapable === 'unknown' ? (
+              <View style={{ borderWidth: 2, borderColor: C.text, padding: 14, marginBottom: 16 }}>
+                <Text style={{ fontFamily: F.heading, fontSize: 12, color: C.text, letterSpacing: 0.4, marginBottom: 6 }}>
+                  {t('esim.compatUnknownTitle')}
+                </Text>
+                <Text style={st.subText}>{t('esim.compatUnknownBody')}</Text>
+              </View>
+            ) : null}
             <PackGrid
               items={esimPlanList}
               onSelect={(p) => { setService('esim'); setCarrier(p.carrier); openPack(p); }}

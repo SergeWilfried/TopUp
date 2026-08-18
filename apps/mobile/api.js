@@ -117,6 +117,20 @@ export const features = (country) =>
 export const esimPlans = (country, lang) =>
   request('GET', `/esim/plans/${encodeURIComponent(country)}?lang=${encodeURIComponent(lang)}`);
 
+/**
+ * Reports the handset once per install, and gets back what it can do.
+ *
+ * Two questions, one round trip. Ours: how much of the base can take an eSIM —
+ * unanswerable from anything else we store, and the number that decides
+ * whether the corridor is worth building. Theirs: can *this* phone install
+ * one, which the eSIM screens need before taking money for a QR code.
+ *
+ * `installId` is generated locally and tied to nothing: no number, no account,
+ * no advertising identifier. Failures are swallowed by the caller — a boot
+ * must never depend on this.
+ */
+export const reportDevice = (payload) => request('POST', '/telemetry/device', payload);
+
 /** VPN locations that are actually installable — active servers only. */
 export const vpnServers = () => request('GET', '/servers');
 

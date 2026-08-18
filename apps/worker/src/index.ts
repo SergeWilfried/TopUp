@@ -34,6 +34,64 @@ app.get('/features', async (c) => {
   return c.json({ country, features: await featuresFor(c.env, country) });
 });
 
+/**
+ * One line about the handset, reported once per install at boot.
+ *
+ * eSIM is the only thing we sell that the customer's own hardware can refuse,
+ * and until this existed there was no way to know how much of the base can
+ * take one — the provider publishes which models work, never how many of ours
+ * are those models. The answer decides whether an eSIM corridor is worth
+ * building at all, so it is worth one request per install.
+ *
+ * Unauthenticated, because boot happens before sign-in, and carrying no
+ * identity on purpose: an install id the app generates for itself, a brand and
+ * a model. Fields are clipped rather than rejected — a report is worth less
+ * than a launch, and must never be what fails one.
+ */
+app.post('/telemetry/device', async (c) => {
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const clip = (v: unknown, n: number) => {
+    const s = typeof v === 'string' ? v.trim().slice(0, n) : '';
+    return s || null;
+  };
+  const installId = clip(body.installId, 64);
+  if (!installId) return c.json({ error: 'install_id_required' }, 400);
+
+  const brand = clip(body.brand, 40);
+  const model = clip(body.model, 80);
+  const { normalizeModel, lookup } = await import('./delivery/esim-devices');
+  const { verdict } = await lookup(c.env, brand, model);
+
+  await c.env.DB.prepare(
+    `INSERT INTO device_seen (install_id, brand, model, model_norm, os_name, os_version, country,
+                              esim_capable, first_seen, last_seen)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(install_id) DO UPDATE SET
+       brand = excluded.brand, model = excluded.model, model_norm = excluded.model_norm,
+       os_name = excluded.os_name, os_version = excluded.os_version,
+       country = COALESCE(excluded.country, device_seen.country),
+       esim_capable = excluded.esim_capable,
+       last_seen = excluded.last_seen`,
+  )
+    .bind(
+      installId,
+      brand,
+      model,
+      normalizeModel(model) || null,
+      clip(body.osName, 20),
+      clip(body.osVersion, 20),
+      (clip(body.country, 2) ?? '').toUpperCase() || null,
+      verdict === 'supported' ? 1 : null,
+      Date.now(),
+      Date.now(),
+    )
+    .run();
+
+  // Answered in the same round trip the report costs, so the eSIM screens can
+  // say something useful about this handset without a second call.
+  return c.json({ esim: verdict });
+});
+
 // Everything under /admin backs the console: dashboard, transactions,
 // customers, subscriptions and catalogue management.
 app.route('/admin', admin);
@@ -97,6 +155,14 @@ export default {
         import('./delivery/esim-plans')
           .then(({ syncEsimPlans }) => syncEsimPlans(env))
           .catch((e) => console.error(`esim sync failed: ${(e as Error).message}`)),
+      );
+      // The device list rides along: 16 KB, changed only when a handset
+      // launches, and stale entries are what make a compatible phone look
+      // unknown at the till.
+      ctx.waitUntil(
+        import('./delivery/esim-devices')
+          .then(({ syncEsimDevices }) => syncEsimDevices(env))
+          .catch((e) => console.error(`esim device sync failed: ${(e as Error).message}`)),
       );
     }
   },

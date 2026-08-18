@@ -395,6 +395,12 @@ export default {
     plansStep: '02 — CHOOSE AN ESIM PLAN',
     plansTitle: 'New eSIM',
     plansSub: 'Delivered instantly — install with a QR code, no store visit.',
+    // Shown before the money moves, not after. An eSIM is the only thing here
+    // the customer's own handset can refuse, and *#06# is the test that
+    // settles it on any phone in two seconds.
+    compatOk: 'This phone can install an eSIM',
+    compatUnknownTitle: 'Check this phone takes an eSIM',
+    compatUnknownBody: 'Dial *#06#. If an EID appears, it can install one. If no EID appears, it cannot — and a plan bought here will not work on it.',
     travel: 'Travel',
   },
 

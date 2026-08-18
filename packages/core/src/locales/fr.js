@@ -395,6 +395,9 @@ export default {
     plansStep: '02 — CHOISIR UN FORFAIT ESIM',
     plansTitle: 'Nouvelle eSIM',
     plansSub: 'Livrée aussitôt — installation par QR code, sans passer en boutique.',
+    compatOk: 'Ce téléphone peut installer une eSIM',
+    compatUnknownTitle: 'Vérifiez que ce téléphone accepte une eSIM',
+    compatUnknownBody: 'Composez *#06#. Si un EID s’affiche, il peut en installer une. Sans EID, il ne peut pas, et un forfait acheté ici n’y fonctionnera pas.',
     travel: 'Voyage',
   },
 

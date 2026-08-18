@@ -157,6 +157,27 @@ export const bulkSimInfo = (env: Env, iccids: string[]) =>
 export const newUser = (env: Env, email: string) =>
   call<{ user_id: string; email: string }>(env, 'POST', '/new_user', { email });
 
+export type YesimDeviceGroup = {
+  /** PHONE | TABLET | LAPTOP | SMARTWATCH | CAR | WI-FI ROUTERS */
+  type: string;
+  brands: Array<{ brand: string; models: Array<{ model: string }> }>;
+};
+
+/**
+ * GET /supported_devices — every handset the provider will install onto.
+ *
+ * A flat catalogue, ~456 models, no lookup parameter: you fetch all of it and
+ * match locally. It answers "can this model hold an eSIM", which is worth
+ * asking *before* taking money for a QR code the customer cannot install.
+ *
+ * What it is not is exhaustive. It is the provider's curated list, and a model
+ * missing from it is unproven rather than disproven — Transsion (Tecno,
+ * Infinix, itel), which is most of what sells in this market, appears zero
+ * times. So a miss here is reported as unknown, never as unsupported.
+ */
+export const supportedDevices = (env: Env) =>
+  call<YesimDeviceGroup[]>(env, 'GET', '/supported_devices', {}, undefined, 30_000);
+
 /** GET /balance — what is left on the partner account. */
 export const balance = (env: Env) => call<{ balance: string | number; currency: string }>(env, 'GET', '/balance');
 

@@ -372,6 +372,25 @@ admin.post('/esim/sync', async (c) => {
   return c.json(await syncEsimPlans(c.env));
 });
 
+/** Pulls Yesim's list of handsets it will install onto. */
+admin.post('/esim/devices/sync', async (c) => {
+  const { syncEsimDevices } = await import('./delivery/esim-devices');
+  return c.json(await syncEsimDevices(c.env));
+});
+
+/**
+ * What the installed base is holding, and how much of it can take an eSIM.
+ *
+ * The one number that says whether an eSIM corridor is a market or a rounding
+ * error. `unmatched` is the work queue: handsets seen often that the provider
+ * does not list, each of which is either genuinely incapable or a spelling we
+ * failed to match — reading them is the only way to tell.
+ */
+admin.get('/devices', async (c) => {
+  const { deviceBreakdown } = await import('./delivery/esim-devices');
+  return c.json(await deviceBreakdown(c.env));
+});
+
 admin.post('/bundles/sync', async (c) => {
   const { syncDataBundles } = await import('./delivery/bundles');
   const country = (c.req.query('country') ?? 'BF').toUpperCase();
