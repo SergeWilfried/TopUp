@@ -8,7 +8,7 @@ import { isQuoteError, loadRates, quoteFor, serviceFeeXof, type Quote } from './
 import { dialableCarriers, matchCollection, prepareDial } from './ussd';
 import { featuresFor, isFeature } from '../features';
 import { canDeliver, deliverOrder } from '../delivery';
-import { MOBILE_MONEY_CARRIERS, diallingCodeFor, iso3For, routeForCountry, toMinorUnits } from '@topup/core';
+import { MOBILE_MONEY_CARRIERS, diallingCodeFor, fmtN, iso3For, isCustomAirtimeAmount, networksFor, routeForCountry, toMinorUnits } from '@topup/core';
 import { normaliseMsisdn } from '../vpn/auth';
 import { sha256, timingSafeEqual } from '../env';
 
@@ -33,7 +33,8 @@ checkout.use('/*', async (c, next) => {
 });
 
 type ProductRow = {
-  id: string;
+  /** Null for a free-amount order, which has no catalogue row. */
+  id: string | null;
   type: string;
   name: string;
   name_key: string | null;
@@ -42,6 +43,8 @@ type ProductRow = {
   enabled: number;
   network: string | null;
   bundle_id: string | null;
+  /** Display name of the market/destination; null for a free-amount order. */
+  country?: string | null;
 };
 
 const PROVIDERS = ['pawapay', 'paystack', 'stripe'] as const;
@@ -111,18 +114,29 @@ checkout.get('/methods', async (c) => {
   if (!route) return c.json({ country, supported: false, methods: [] }, 200);
 
   const productId = c.req.query('productId');
+  const amountParam = c.req.query('amount');
   const rates = await loadRates(c.env);
 
   let quote: Quote | null = null;
+  // Either a catalogue line or a free amount is quoted; the fee rule is the
+  // same, so a 1 500 F custom top-up and a 1 500 F pack cost the same.
+  let face: { price: number; type: string } | null = null;
   if (productId) {
     const product = await c.env.DB.prepare(`SELECT price, type FROM products WHERE id = ? AND enabled = 1`)
       .bind(productId)
       .first<{ price: number; type: string }>();
     if (!product) return c.json({ error: 'unknown_product', field: 'productId' }, 404);
+    face = product;
+  } else if (amountParam !== undefined) {
+    const amount = Number(amountParam);
+    if (!isCustomAirtimeAmount(amount)) return c.json({ error: 'amount_invalid', field: 'amount' }, 400);
+    face = { price: amount, type: 'airtime' };
+  }
+  if (face) {
     // Quoted with the fee, so the figure shown before committing is the figure
     // charged. Computing it in two places is how they drift apart.
-    const fee = serviceFeeXof(c.env, product.type, product.price);
-    const q = quoteFor(product.price, country, rates, fee.xof, fee.pct);
+    const fee = serviceFeeXof(c.env, face.type, face.price);
+    const q = quoteFor(face.price, country, rates, fee.xof, fee.pct);
     if (isQuoteError(q)) return c.json({ error: q.error }, q.status as 422);
     quote = q;
   }
@@ -145,6 +159,15 @@ checkout.get('/methods', async (c) => {
 checkout.post('/', async (c) => {
   type Body = {
     productId?: string;
+    /**
+     * Free-amount airtime, instead of a productId. Whole XOF within
+     * CUSTOM_AIRTIME; the network is chosen by the customer since there is no
+     * catalogue row to carry it.
+     */
+    amount?: number;
+    network?: string;
+    /** eSIM top-up: the profile (already owned by this buyer) the plan goes on. */
+    iccid?: string;
     /** The wallet being charged. Belongs to the buyer, whoever the order is for. */
     msisdn?: string;
     /** Where the pack is delivered, when that is not the buyer's own line. */
@@ -172,17 +195,61 @@ checkout.post('/', async (c) => {
   const msisdn = (body.msisdn ?? '').trim();
   const recipientMsisdn = (body.recipientMsisdn ?? '').trim();
   // Falls back to the buyer's country: topping up your own line is the common case.
-  const recipientCountry = (body.recipientCountry ?? country).toUpperCase();
+  // (An eSIM overrides this below with its destination.)
+  let recipientCountry = (body.recipientCountry ?? country).toUpperCase();
   // Mobile money is charged to a handset; card rails are not.
   if (provider === 'pawapay' && msisdn.replace(/\D/g, '').length < 8)
     return c.json({ error: 'msisdn_invalid', field: 'msisdn' }, 400);
 
-  const product = await c.env.DB.prepare(`SELECT * FROM products WHERE id = ?`)
-    .bind(body.productId ?? '')
-    .first<ProductRow>();
-  if (!product) return c.json({ error: 'unknown_product', field: 'productId' }, 404);
-  // A disabled product must not be purchasable, even by a stale client.
-  if (!product.enabled) return c.json({ error: 'product_unavailable', field: 'productId' }, 409);
+  /**
+   * What is being bought: a catalogue line, or a free amount of airtime.
+   *
+   * A custom amount is shaped into the same record a catalogue row would give,
+   * so everything downstream — feature switches, deliverability, quote, order
+   * — runs unchanged. The price is the customer's figure, checked against the
+   * bounds the keypad also enforces, and never trusted beyond them.
+   */
+  let product: ProductRow | null = null;
+  if (body.productId) {
+    product = await c.env.DB.prepare(`SELECT * FROM products WHERE id = ?`)
+      .bind(body.productId)
+      .first<ProductRow>();
+    if (!product) return c.json({ error: 'unknown_product', field: 'productId' }, 404);
+    // A disabled product must not be purchasable, even by a stale client.
+    if (!product.enabled) return c.json({ error: 'product_unavailable', field: 'productId' }, 409);
+  } else if (body.amount !== undefined) {
+    if (!isCustomAirtimeAmount(body.amount)) return c.json({ error: 'amount_invalid', field: 'amount' }, 400);
+    const network = String(body.network ?? '').trim();
+    const deliveryCountry0 = (body.recipientCountry ?? country).toUpperCase();
+    // Only an operator this market actually has; the deliverability check
+    // below then confirms a distributor can reach it.
+    if (!network || !networksFor(deliveryCountry0).includes(network))
+      return c.json({ error: 'network_unsupported', field: 'network' }, 422);
+    product = {
+      id: null,
+      type: 'airtime',
+      country: null,
+      name: `${fmtN(body.amount)} FCFA`,
+      name_key: null,
+      price: body.amount,
+      days: null,
+      enabled: 1,
+      network,
+      bundle_id: null,
+    };
+  } else {
+    return c.json({ error: 'unknown_product', field: 'productId' }, 404);
+  }
+
+  // An eSIM is "delivered" to a destination, not to the buyer's country: the
+  // product's country is the destination's display name, and the ISO code the
+  // rest of the pipeline wants comes from the destinations table.
+  if (product.type === 'esim' && product.country) {
+    const dest = await c.env.DB.prepare(`SELECT code FROM destinations WHERE name = ?`)
+      .bind(product.country)
+      .first<{ code: string }>();
+    if (dest?.code) recipientCountry = dest.code.toUpperCase();
+  }
 
   /**
    * Market switches, enforced here rather than only in the app.
@@ -199,6 +266,9 @@ checkout.post('/', async (c) => {
   const flags = await featuresFor(c.env, deliveryCountry);
   if (isFeature(product.type) && !flags[product.type]) {
     return c.json({ error: 'feature_unavailable', feature: product.type }, 403);
+  }
+  if (product.id === null && !flags.customAmount) {
+    return c.json({ error: 'feature_unavailable', feature: 'customAmount' }, 403);
   }
 
   // Same market in the common case, so the second lookup is skipped rather than
@@ -256,6 +326,23 @@ checkout.post('/', async (c) => {
       return c.json({ error: 'recipient_undeliverable', field: 'recipientMsisdn' }, 422);
     }
   }
+  // An eSIM is only sellable when a provider can issue it — a plan with no
+  // provider id, or no provider configured, used to take payment and then
+  // fabricate a profile in the app. Now it is refused before money moves.
+  if (product.type === 'esim') {
+    const deliverable = canDeliver(c.env, {
+      orderId: 'preflight',
+      product: 'esim',
+      sku: product.id,
+      amount: product.price,
+      msisdn: msisdn,
+      country: recipientCountry,
+      network: product.network,
+      bundleId: product.bundle_id,
+      iccid: body.iccid ?? null,
+    });
+    if (!deliverable) return c.json({ error: 'esim_unavailable', field: 'productId' }, 422);
+  }
 
   // Card rails need somewhere to send the receipt.
   if (provider !== 'pawapay' && !body.email) return c.json({ error: 'email_required', field: 'email' }, 400);
@@ -275,6 +362,16 @@ checkout.post('/', async (c) => {
   );
   if (!customerId) return c.json({ error: 'msisdn_invalid', field: 'msisdn' }, 400);
 
+  // A top-up names a profile; it has to be one of this customer's, or a stray
+  // ICCID could be credited on someone else's account.
+  const targetIccid = product.type === 'esim' && body.iccid ? String(body.iccid).replace(/\D/g, '') : null;
+  if (targetIccid) {
+    const owned = await c.env.DB.prepare(`SELECT 1 FROM esims WHERE iccid = ? AND customer_id = ?`)
+      .bind(targetIccid, customerId)
+      .first();
+    if (!owned) return c.json({ error: 'esim_not_owned', field: 'iccid' }, 403);
+  }
+
   const orderId = `TX-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   const paymentId = crypto.randomUUID();
   // The order is always recorded in XOF; the payment records what was charged.
@@ -282,8 +379,8 @@ checkout.post('/', async (c) => {
 
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO orders (id, customer_id, product, sku, detail, amount, fee, status, created_at, recipient_msisdn, recipient_country)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      `INSERT INTO orders (id, customer_id, product, sku, detail, amount, fee, status, created_at, recipient_msisdn, recipient_country, network, esim_iccid)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
     ).bind(
       orderId,
       customerId,
@@ -295,6 +392,8 @@ checkout.post('/', async (c) => {
       now(),
       recipientMsisdn ? normaliseMsisdn(recipientMsisdn, recipientCountry) : null,
       recipientCountry,
+      product.network,
+      targetIccid,
     ),
     c.env.DB.prepare(
       `INSERT INTO payments (id, order_id, provider, provider_ref, amount, currency, status, created_at)
@@ -434,6 +533,7 @@ checkout.get('/:orderId', async (c) => {
 
   const order = await c.env.DB.prepare(
     `SELECT o.id, o.status, o.detail, o.amount, o.failure_reason AS failureReason,
+            o.product, o.esim_iccid AS esimIccid,
             p.provider, p.status AS paymentStatus
      FROM orders o
      LEFT JOIN payments p ON p.id = (
@@ -442,8 +542,23 @@ checkout.get('/:orderId', async (c) => {
      WHERE o.id = ?`,
   )
     .bind(c.req.param('orderId'))
-    .first();
-  return order ? c.json(order) : c.json({ error: 'not_found' }, 404);
+    .first<{ id: string; status: string; product: string; esimIccid: string | null }>();
+  if (!order) return c.json({ error: 'not_found' }, 404);
+
+  // A delivered eSIM order carries what the customer needs to install it, so
+  // the success screen can show the real QR rather than inventing one.
+  let esim: unknown = null;
+  if (order.product === 'esim' && order.esimIccid) {
+    esim = await c.env.DB.prepare(
+      `SELECT iccid, label, country, qrcode, ios_tap_link AS iosTapLink, passport_url AS passportUrl,
+              status_qr AS statusQr, plan_expired_at AS planExpiredAt,
+              data_package_mb AS dataPackageMb, data_left_mb AS dataLeftMb
+       FROM esims WHERE iccid = ?`,
+    )
+      .bind(order.esimIccid)
+      .first();
+  }
+  return c.json({ ...order, esim });
 });
 
 // ── fulfilment ─────────────────────────────────────────────────────────────

@@ -233,6 +233,25 @@ export const canonicalMsisdn = (raw, country) => {
 };
 
 /**
+ * A stored (canonical) number in the form its own market types it.
+ *
+ * The inverse of `toE164` for a field a customer looks at: the account's number
+ * is held as E.164 digits, but dropped into a phone field that already shows
+ * "+226" it read as "+226 22670123456". The dialling code is stripped only when
+ * it matches the country *and* what remains is a valid national length there —
+ * so a Côte d'Ivoire number keeps its leading 0, which is part of the number.
+ * Anything that cannot be re-shaped is returned as digits, unmangled.
+ */
+export const toNational = (raw, country) => {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  const dial = diallingCodeFor(country);
+  const lengths = nationalLengthsFor(country);
+  if (!digits || !dial || !lengths || !digits.startsWith(dial)) return digits;
+  const rest = digits.slice(dial.length);
+  return lengths.includes(rest.length) ? rest : digits;
+};
+
+/**
  * Merchant-payment USSD, per market and wallet.
  *
  * `{merchant}` is substituted with your merchant code. Deliberately no amount

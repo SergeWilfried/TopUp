@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Pressable } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { C, F } from '@topup/core';
-import { EmptyState, TabHeader, st } from '../ui';
+import { C } from '@topup/core';
+import { EmptyState, StatusText, TabHeader, st } from '../ui';
 import { NoHistory } from '../illustrations';
 
-export default function HistoryScreen({ history, loading, onBuy }) {
+export default function HistoryScreen({ history, loading, onBuy, onOpen }) {
   const { t } = useTranslation();
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
@@ -23,17 +23,27 @@ export default function HistoryScreen({ history, loading, onBuy }) {
         />
       ) : null}
       <View style={{ padding: 20, paddingTop: 4 }}>
+        {/* Each row opens the order: reference, amounts, what happened, and a
+            way to reach support — the things a customer wants when a top-up
+            has not arrived, and previously nowhere to be found in the app. */}
         {history.map((h, i) => (
-          <View key={i} style={st.listRow}>
+          <Pressable
+            key={h.id ?? i}
+            onPress={onOpen ? () => onOpen(h) : undefined}
+            accessibilityRole="button"
+            accessibilityLabel={`${h.desc}, ${h.amount}, ${h.status}`}
+            style={({ pressed }) => [st.listRow, pressed && onOpen && { backgroundColor: C.accent100 }]}
+          >
             <View style={{ flex: 1 }}>
               <Text style={st.rowTitle}>{h.desc}</Text>
               <Text style={st.subText}>{h.meta}</Text>
             </View>
-            <View style={{ alignItems: 'flex-end' }}>
+            <View style={{ alignItems: 'flex-end', gap: 2 }}>
               <Text style={st.packPrice}>{h.amount}</Text>
-              <Text style={{ color: C.accent, fontSize: 10, letterSpacing: 1, fontFamily: F.semi }}>{h.status}</Text>
+              <StatusText code={h.code} label={h.status} />
             </View>
-          </View>
+            {onOpen ? <Text style={[st.arrow, { marginLeft: 6 }]}>→</Text> : null}
+          </Pressable>
         ))}
       </View>
     </ScrollView>

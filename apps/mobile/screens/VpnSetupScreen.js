@@ -118,5 +118,5 @@ const sx = StyleSheet.create({
   qrCaption: { fontFamily: F.semi, fontSize: 10, letterSpacing: 1.2, color: C.muted },
   card: { borderWidth: 2, borderColor: C.text, padding: 16, gap: 10 },
   step: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  stepNum: { fontFamily: F.heading, fontSize: 12, color: C.accent, width: 14, marginTop: 2 },
+  stepNum: { fontFamily: F.heading, fontSize: 12, color: C.accentText, width: 14, marginTop: 2 },
 });

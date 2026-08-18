@@ -4,17 +4,47 @@ import { C } from './theme';
 export const fmtN = (n) => n.toLocaleString('fr-FR').replace(/[ ,]/g, ' ');
 export const fmt = (n) => fmtN(n) + ' FCFA';
 
+// The Ivorian networks with their post-2021 leading digits. Kept under this
+// name because the admin console, the seed and the worker read it as "the
+// home-market carrier list".
 export const CARRIERS = [
   { name: 'Orange', prefix: '07' },
   { name: 'MTN', prefix: '05' },
   { name: 'Moov', prefix: '01' },
 ];
 
-export const detect = (phone) => {
-  const d = phone.replace(/\D/g, '');
-  const c = CARRIERS.find((c) => d.startsWith(c.prefix));
+/**
+ * Leading digits that name a network, per market.
+ *
+ * Only markets whose numbering plan we actually hold get an entry. Detection
+ * used to apply the Ivorian table to every number, so a Burkinabè line
+ * starting 05 was announced as "MTN" — a network Burkina does not have — and
+ * the customer was walked into an empty pack list. A market with no table
+ * gets no guess: the customer picks the network, which is the honest answer
+ * when the number cannot tell us.
+ */
+export const NETWORK_PREFIXES = {
+  CI: CARRIERS,
+};
+
+/**
+ * The network a national number is on, when the market's prefixes say so.
+ *
+ * `country` decides which table applies; the same digits mean different
+ * things in different plans. Returns null for a market without a table, or
+ * a number that matches nothing — never a carrier from another country.
+ */
+export const detect = (phone, country = 'CI') => {
+  const table = NETWORK_PREFIXES[String(country ?? '').toUpperCase()];
+  if (!table) return null;
+  const d = String(phone ?? '').replace(/\D/g, '');
+  const c = table.find((c) => d.startsWith(c.prefix));
   return c ? c.name : null;
 };
+
+/** Prefix hint for a network in a market, or null where none is known. */
+export const prefixFor = (country, network) =>
+  NETWORK_PREFIXES[String(country ?? '').toUpperCase()]?.find((c) => c.name === network)?.prefix ?? null;
 
 export const ussdFor = (carrier, amount) => {
   const codes = { Orange: '#144*82*', MTN: '*133*1*', Moov: '*855*4*' };
@@ -31,12 +61,27 @@ export const dataPacks = (t) => [
   { n: t('packs.night2gb'), v: t('packs.nightWindow'), p: 300 },
 ];
 
+/**
+ * Free-amount airtime.
+ *
+ * Bounds are shared with the worker so the keypad and the API refuse the same
+ * figures — a client that allowed more than the server would send the customer
+ * to a red notice at the last step. XOF has no minor unit, so whole francs.
+ */
+export const CUSTOM_AIRTIME = { min: 100, max: 500000 };
+
+export const isCustomAirtimeAmount = (n) =>
+  Number.isInteger(n) && n >= CUSTOM_AIRTIME.min && n <= CUSTOM_AIRTIME.max;
+
+/** The operators' standing airtime bonus tiers, as the seeded packs show them. */
+export const airtimeBonusFor = (p) => (p >= 5000 ? '+10% BONUS' : p >= 1000 ? '+5% BONUS' : null);
+
 export const airtimePacks = (t) =>
   [500, 1000, 2000, 5000, 10000].map((p) => ({
     n: fmtN(p) + ' FCFA',
     v: t('packs.airtimeCredit'),
     p,
-    b: p >= 5000 ? '+10% BONUS' : p >= 1000 ? '+5% BONUS' : null,
+    b: airtimeBonusFor(p),
   }));
 
 // Destinations as keys. `name` is the stable identity used for lookups and is
@@ -216,7 +261,8 @@ export const onboardingSlides = (t) => [
     glyph: '₣',
     title: t('onboarding.airtimeTitle'),
     body: t('onboarding.airtimeBody'),
-    bg: C.accent, fg: C.bg, dim: 'rgba(243,242,242,0.85)', kick: 'rgba(243,242,242,0.85)',
+    // Full light on red: the translucent version fell to 3.0:1 for 13px body.
+    bg: C.accent, fg: C.bg, dim: C.bg, kick: C.bg,
   },
   {
     key: 'data',
@@ -232,6 +278,7 @@ export const onboardingSlides = (t) => [
     glyph: 'eSIM',
     title: t('onboarding.esimTitle'),
     body: t('onboarding.esimBody'),
-    bg: C.surface, fg: C.text, dim: C.muted, kick: C.accent, bordered: true,
+    // Small red type on a light ground takes the deep accent (see theme.js).
+    bg: C.surface, fg: C.text, dim: C.muted, kick: C.accentText, bordered: true,
   },
 ];

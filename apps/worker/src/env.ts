@@ -44,6 +44,12 @@ export type Env = {
   SERVICE_FEE_PCT?: string;
   /** '1' stands a fake distributor in until real credentials work. */
   MOCK_DELIVERY?: string;
+  // Yesim Partner API — eSIM issuing and plans. Token travels as a query
+  // parameter, so no built URL may be logged.
+  YESIM_TOKEN?: string;
+  YESIM_BASE_URL?: string;
+  /** Margin over Yesim's EUR cost when pricing eSIM plans in XOF. Defaults to 25. */
+  ESIM_MARGIN_PCT?: string;
   /** Shared secret the collector device signs its reports with. */
   COLLECTOR_TOKEN?: string;
 

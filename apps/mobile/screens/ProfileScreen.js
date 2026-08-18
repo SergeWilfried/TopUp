@@ -6,7 +6,7 @@ import { methodsFor } from '../payment';
 import { LANGS } from '../i18n';
 import { TabHeader, st } from '../ui';
 
-export default function ProfileScreen({ carrier, phone, country, esims, vpn, onEsims, onVpn, onLanguage, onSignOut, featureOn = () => true }) {
+export default function ProfileScreen({ carrier, phone, country, esims, vpn, onEsims, onVpn, onLanguage, onHelp, supportChannel, onSignOut, featureOn = () => true }) {
   const { t, i18n } = useTranslation();
   const methods = methodsFor(country)
     .methods.map((m) => m.title)
@@ -24,7 +24,7 @@ export default function ProfileScreen({ carrier, phone, country, esims, vpn, onE
     {
       show: featureOn('esim') || esims.length > 0,
       name: t('profile.esims'),
-      sub: t('profile.esimsSub', { total: esims.length, active: esims.filter((e) => e.status === 'active').length }),
+      sub: t('profile.esimsSub', { total: esims.length, active: esims.filter((e) => String(e.statusQr ?? '').toLowerCase() === 'enabled').length }),
       go: onEsims,
     },
     {
@@ -42,14 +42,16 @@ export default function ProfileScreen({ carrier, phone, country, esims, vpn, onE
       // that has never stored a payment method.
       sub: methods.length ? t('profile.paymentSub', { methods }) : t('profile.paymentNone'),
     },
+    // Informational until there is a screen behind them: no arrow, no press
+    // state, so they stop looking like doors that do not open.
     { name: t('profile.notifications'), sub: t('profile.notificationsSub') },
     {
       name: t('profile.language'),
       sub: (LANGS.find((l) => l.code === i18n.language) || LANGS[0]).name,
       go: onLanguage,
     },
-    { name: t('profile.help'), sub: t('profile.helpSub') },
-    { name: t('profile.signOut'), sub: t('profile.signOutSub'), go: onSignOut },
+    { name: t('profile.help'), sub: supportChannel ? t('profile.helpVia', { channel: supportChannel }) : t('profile.helpSub'), go: onHelp },
+    { name: t('profile.signOut'), sub: t('profile.signOutSub'), go: onSignOut, destructive: true },
   ];
 
   return (
@@ -80,13 +82,23 @@ export default function ProfileScreen({ carrier, phone, country, esims, vpn, onE
             <Pressable
               key={r.name}
               onPress={r.go}
-              style={({ pressed }) => [st.listRow, { paddingVertical: 15 }, pressed && r.go && { backgroundColor: C.accent100 }]}
+              disabled={!r.go}
+              accessibilityRole={r.go ? 'button' : 'text'}
+              accessibilityLabel={`${r.name}. ${r.sub}`}
+              style={({ pressed }) => [
+                st.listRow,
+                { paddingVertical: 15 },
+                // Sign out is the one row that undoes something: a heavier rule
+                // above it separates it from the navigation list.
+                r.destructive && { borderTopWidth: 2, borderColor: C.divider, marginTop: 8 },
+                pressed && r.go && { backgroundColor: C.accent100 },
+              ]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={st.rowTitle}>{r.name}</Text>
+                <Text style={[st.rowTitle, r.destructive && { color: C.accentText }]}>{r.name}</Text>
                 <Text style={st.subText}>{r.sub}</Text>
               </View>
-              <Text style={st.arrow}>→</Text>
+              {r.go ? <Text style={st.arrow}>→</Text> : null}
             </Pressable>
           ))}
         </View>

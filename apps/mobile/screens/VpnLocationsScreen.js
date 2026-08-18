@@ -28,7 +28,7 @@ export default function VpnLocationsScreen({
           <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 38, letterSpacing: -1 }}>
             {t('vpn.liveTitle')}
           </Text>
-          <Text style={{ color: 'rgba(243,242,242,0.85)', fontSize: 12, fontFamily: F.body, marginTop: 6 }}>
+          <Text style={{ color: C.bg, fontSize: 12, fontFamily: F.body, marginTop: 6 }}>
             {t('vpn.liveBody', { email })}
           </Text>
         </View>
@@ -51,6 +51,8 @@ export default function VpnLocationsScreen({
             <Pressable
               key={l.code}
               onPress={() => onSelect(l)}
+              accessibilityRole="button"
+              accessibilityLabel={`${l.name}${added.includes(l.code) ? ', ' + t('vpn.added') : ''}`}
               style={({ pressed }) => [st.packRow, { paddingVertical: 16 }, pressed && { backgroundColor: C.accent100 }]}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>

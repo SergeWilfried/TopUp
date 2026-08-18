@@ -157,6 +157,47 @@ vpn.get('/me', async (c) => {
  * connecting a phone sign-in to the purchases made from it. Card-rail orders
  * are filed under `email:<address>`, so both keys are matched.
  */
+/**
+ * The eSIM profiles this account owns, refreshed from the provider.
+ *
+ * Refreshed on read rather than on a schedule: data-left changes as the
+ * customer browses, and the moment they look is the moment it should be
+ * right. Rows read within the last ten minutes are served as stored, so an
+ * open-close-open does not hit the provider three times.
+ */
+vpn.get('/me/esims', async (c) => {
+  const user = c.get('user');
+  const keys = [user.msisdn, user.email && `email:${user.email}`].filter(Boolean) as string[];
+  if (!keys.length) return c.json({ esims: [] });
+  const placeholders = keys.map(() => '?').join(', ');
+  const customer = await c.env.DB.prepare(`SELECT id FROM customers WHERE msisdn IN (${placeholders})`)
+    .bind(...keys)
+    .first<{ id: string }>();
+  if (!customer) return c.json({ esims: [] });
+
+  const { refreshEsims } = await import('../delivery/yesim');
+  const staleBefore = Date.now() - 10 * 60_000;
+  const { results: stale } = await c.env.DB.prepare(
+    `SELECT iccid FROM esims WHERE customer_id = ? AND (synced_at IS NULL OR synced_at < ?) LIMIT 50`,
+  )
+    .bind(customer.id, staleBefore)
+    .all<{ iccid: string }>();
+  if (stale.length) await refreshEsims(c.env, stale.map((r) => r.iccid)).catch(() => {});
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT e.iccid, e.label, e.country, e.qrcode, e.ios_tap_link AS iosTapLink, e.passport_url AS passportUrl,
+            e.status_qr AS statusQr, e.plan_id AS planId, e.plan_activated_at AS planActivatedAt,
+            e.plan_expired_at AS planExpiredAt, e.data_package_mb AS dataPackageMb,
+            e.data_left_mb AS dataLeftMb, e.data_used_mb AS dataUsedMb, e.created_at AS createdAt,
+            e.order_id AS orderId, o.detail AS orderDetail
+     FROM esims e LEFT JOIN orders o ON o.id = e.order_id
+     WHERE e.customer_id = ? ORDER BY e.created_at DESC`,
+  )
+    .bind(customer.id)
+    .all();
+  return c.json({ esims: results });
+});
+
 vpn.get('/me/orders', async (c) => {
   const user = c.get('user');
   const keys = [user.msisdn, user.email && `email:${user.email}`].filter(Boolean) as string[];
@@ -178,6 +219,8 @@ vpn.get('/me/orders', async (c) => {
     `SELECT o.id, o.product, o.sku, o.detail, o.amount, o.currency, o.status,
             o.created_at AS createdAt, o.delivered_at AS deliveredAt,
             o.failure_reason AS failureReason, o.recipient_msisdn AS recipientMsisdn,
+            o.recipient_country AS recipientCountry,
+            COALESCE(o.network, p.network) AS network,
             p.name_key AS nameKey, p.name AS productName,
             p.terms_key AS termsKey, p.terms AS terms, p.terms_params AS termsParams
      FROM orders o

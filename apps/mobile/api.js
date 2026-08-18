@@ -90,6 +90,9 @@ export const me = () => request('GET', '/me');
 /** Purchases and loyalty balance for the signed-in account. */
 export const myOrders = (lang) => request('GET', `/me/orders?lang=${encodeURIComponent(lang || 'en')}`);
 
+/** eSIM profiles the account owns, refreshed from the provider on read. */
+export const myEsims = () => request('GET', '/me/esims');
+
 // ── catalogue ───────────────────────────────────────────────────────────────
 /**
  * The sellable catalogue, already translated server-side.
@@ -119,11 +122,13 @@ export const vpnServers = () => request('GET', '/servers');
 
 // ── purchase ────────────────────────────────────────────────────────────────
 /** Payment options and the converted price for this market. */
-export const paymentMethods = (country, productId) =>
+export const paymentMethods = (country, productId, amount) =>
   request(
     'GET',
     `/checkout/methods?country=${encodeURIComponent(country)}` +
-      (productId ? `&productId=${encodeURIComponent(productId)}` : ''),
+      (productId ? `&productId=${encodeURIComponent(productId)}` : '') +
+      // A free amount is quoted the same way a product is — same fee rule.
+      (!productId && amount ? `&amount=${encodeURIComponent(amount)}` : ''),
   );
 
 /**
@@ -133,9 +138,11 @@ export const paymentMethods = (country, productId) =>
  * Resolves to `{ orderId, status, action, url?, quote }` — `action` is
  * 'approve_on_handset' for mobile money or 'redirect' for card rails.
  */
-export const startCheckout = ({ productId, country, msisdn, recipientMsisdn, recipientCountry, email, instrument, carrier }) =>
+export const startCheckout = ({ productId, amount, network, iccid, country, msisdn, recipientMsisdn, recipientCountry, email, instrument, carrier }) =>
   request('POST', '/checkout', {
-    productId, country, msisdn, recipientMsisdn, recipientCountry, email,
+    // Either a catalogue line, or a free amount on a named network. `iccid`
+    // makes an eSIM purchase a top-up of a profile the customer already has.
+    productId, amount, network, iccid, country, msisdn, recipientMsisdn, recipientCountry, email,
     // 'dial' collects straight into our merchant wallet — no processing fee and
     // no provider call; the customer's handset is the rail.
     instrument, carrier,
@@ -152,12 +159,22 @@ export const orderStatus = (orderId) => request('GET', `/checkout/${encodeURICom
  */
 export async function waitForOrder(orderId, { intervalMs = 2500, timeoutMs = 180000, signal } = {}) {
   const deadline = Date.now() + timeoutMs;
+  // The pause between polls ends early on abort, so STOP WAITING answers at
+  // once rather than after whatever is left of the interval.
+  const pause = () =>
+    new Promise((resolve, reject) => {
+      if (signal?.aborted) return reject(new ApiError(0, 'cancelled'));
+      const id = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, intervalMs);
+      const onAbort = () => { clearTimeout(id); reject(new ApiError(0, 'cancelled')); };
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
   for (;;) {
     if (signal?.aborted) throw new ApiError(0, 'cancelled');
     const order = await orderStatus(orderId);
+    if (signal?.aborted) throw new ApiError(0, 'cancelled');
     if (order.status && order.status !== 'pending') return order;
     if (Date.now() >= deadline) throw new ApiError(0, 'timeout');
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await pause();
   }
 }
 

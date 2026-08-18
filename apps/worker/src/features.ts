@@ -25,6 +25,8 @@ export const FEATURES = {
   dial: { default: true, label: 'Dial-to-pay (USSD)' },
   /** Paying by approving a push prompt through the PSP. */
   momo: { default: true, label: 'Mobile money push' },
+  /** Free-amount airtime, charged through the same rails as a catalogue pack. */
+  customAmount: { default: true, label: 'Custom airtime amount' },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

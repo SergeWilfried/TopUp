@@ -119,6 +119,8 @@ CREATE TABLE IF NOT EXISTS orders (
   delivered_at   INTEGER,
   recipient_msisdn TEXT,
   recipient_country TEXT,
+  network        TEXT,                   -- delivered on; free-amount orders have no sku to read it from
+  esim_iccid     TEXT,                   -- eSIM profile this order targets / issued
   delivery_provider TEXT,
   delivery_ref     TEXT,
   delivery_error   TEXT,
@@ -203,3 +205,29 @@ CREATE TABLE IF NOT EXISTS fx_rates (
   pegged     INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL
 );
+
+-- eSIM profiles the customer owns (see migrations/0017_esims.sql).
+CREATE TABLE IF NOT EXISTS esims (
+  iccid              TEXT PRIMARY KEY,
+  customer_id        TEXT,
+  order_id           TEXT,
+  provider           TEXT NOT NULL DEFAULT 'yesim',
+  provider_esim_id   TEXT,
+  plan_id            TEXT,
+  label              TEXT,
+  country            TEXT,
+  qrcode             TEXT,
+  ios_tap_link       TEXT,
+  passport_url       TEXT,
+  status_qr          TEXT,
+  plan_activated_at  TEXT,
+  plan_expired_at    TEXT,
+  data_package_mb    REAL,
+  data_left_mb       REAL,
+  data_used_mb       REAL,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER NOT NULL,
+  synced_at          INTEGER
+);
+CREATE INDEX IF NOT EXISTS esims_customer ON esims(customer_id);
+CREATE INDEX IF NOT EXISTS esims_order ON esims(order_id);

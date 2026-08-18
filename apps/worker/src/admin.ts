@@ -366,6 +366,12 @@ admin.get('/endpoints/:code/token', async (c) => {
  * Safe to run repeatedly: bundles are upserted by id and ones that vanish are
  * disabled rather than deleted, so order history keeps resolving.
  */
+/** Pulls Yesim's plans for the curated destinations into the catalogue. */
+admin.post('/esim/sync', async (c) => {
+  const { syncEsimPlans } = await import('./delivery/esim-plans');
+  return c.json(await syncEsimPlans(c.env));
+});
+
 admin.post('/bundles/sync', async (c) => {
   const { syncDataBundles } = await import('./delivery/bundles');
   const country = (c.req.query('country') ?? 'BF').toUpperCase();

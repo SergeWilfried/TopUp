@@ -74,8 +74,10 @@ export type DeliveryRequest = {
   /** ISO-2 of the recipient's country, which decides the provider. */
   country: string;
   network: string | null;
-  /** Distributor's opaque id for a data bundle. Airtime has none. */
+  /** Distributor's opaque id for a data bundle, or the eSIM plan id. Airtime has none. */
   bundleId: string | null;
+  /** For an eSIM top-up: the profile the plan goes on. Null issues a new one. */
+  iccid?: string | null;
 };
 
 /**

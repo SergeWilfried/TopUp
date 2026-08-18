@@ -6,6 +6,7 @@ import {
 } from './types';
 
 export * from './types';
+import { yesim } from './yesim';
 import { lafricamobile } from './lafricamobile';
 import { mockEnabled, mockProvider } from './mock';
 export { checkBalance } from './lafricamobile';
@@ -41,6 +42,9 @@ export function configureProviders(env: Env) {
   if (!providers.some((p) => p.name === 'lafricamobile')) {
     providers.push(lafricamobile(env));
   }
+  if (!providers.some((p) => p.name === 'yesim')) {
+    providers.push(yesim(env));
+  }
 }
 
 export const providerFor = (req: DeliveryRequest): DeliveryProvider | null =>
@@ -73,6 +77,7 @@ type OrderRow = {
   buyer_country: string | null;
   network: string | null;
   bundle_id: string | null;
+  esim_iccid: string | null;
 };
 
 /** Everything a provider needs, assembled from the order and its customer. */
@@ -80,7 +85,8 @@ async function loadRequest(env: Env, orderId: string): Promise<OrderRow | null> 
   return env.DB.prepare(
     `SELECT o.id, o.product, o.sku, o.amount, o.status,
             o.recipient_msisdn, o.recipient_country,
-            c.msisdn AS buyer_msisdn, o.recipient_country AS buyer_country, p.network, p.bundle_id
+            c.msisdn AS buyer_msisdn, o.recipient_country AS buyer_country,
+            COALESCE(o.network, p.network) AS network, p.bundle_id, o.esim_iccid
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      LEFT JOIN products p ON p.id = o.sku
@@ -124,6 +130,7 @@ export async function deliverOrder(env: Env, orderId: string): Promise<void> {
     country: (order.recipient_country ?? '').toUpperCase(),
     network: order.network,
     bundleId: order.bundle_id,
+    iccid: order.esim_iccid,
   };
 
   const provider = providerFor(req);

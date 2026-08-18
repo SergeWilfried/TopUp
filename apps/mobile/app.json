@@ -14,7 +14,12 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.tofee.topup",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "mailto",
+          "tel",
+          "whatsapp"
+        ]
       }
     },
     "android": {

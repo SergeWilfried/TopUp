@@ -15,7 +15,7 @@ export default function VpnPlansScreen({ plans = [], locations = [], onBack, onS
       <BackHeader onBack={onBack} label={t('vpn.step')} />
 
       <View style={{ backgroundColor: C.text, padding: 20, paddingTop: 24 }}>
-        <Kicker>{t('vpn.premium')}</Kicker>
+        <Kicker onDark>{t('vpn.premium')}</Kicker>
         <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 38, lineHeight: 40, letterSpacing: -1 }}>
           {t('vpn.heroTitle')}
         </Text>

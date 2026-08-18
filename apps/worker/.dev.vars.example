@@ -70,3 +70,11 @@ LAFRICAMOBILE_BASE_URL=https://airtime.lafricamobile.com
 # ── test only ───────────────────────────────────────────────────────────────
 # Points the Twilio adapter at a local double. Leave unset everywhere real.
 # TWILIO_BASE_URL=http://127.0.0.1:9400
+
+# Yesim Partner API — eSIM issuing and plans (https://core.yesim.biz → API-token).
+# Token is sent as a query parameter; leave unset to disable the eSIM rail.
+YESIM_TOKEN=
+# Override only for tests (a local double); defaults to https://partners-api.yesim.biz
+YESIM_BASE_URL=
+# Margin over Yesim's EUR cost when pricing eSIM plans in XOF (default 25).
+ESIM_MARGIN_PCT=25

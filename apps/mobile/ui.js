@@ -6,14 +6,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, S, F, fmt, flagFor, toE164, PAYABLE_COUNTRIES } from '@topup/core';
 import { NoPacks } from './illustrations';
 
-export const Kicker = ({ children, light }) => (
-  <Text style={[st.kicker, light && { color: 'rgba(243,242,242,0.85)' }]}>{children}</Text>
+// `light` sits on a red fill, `onDark` on an ink one. Both need a colour the
+// default cannot give: deep red vanishes on ink, and a translucent light on red
+// dropped to 3.0:1 — full `bg` is what a red panel can carry.
+export const Kicker = ({ children, light, onDark }) => (
+  <Text style={[st.kicker, light && { color: C.bg }, onDark && { color: C.accent }]}>{children}</Text>
 );
 
-export const Btn = ({ label, onPress, variant = 'primary', disabled, style }) => (
+export const Btn = ({ label, onPress, variant = 'primary', disabled, style, accessibilityLabel, hitSlop }) => (
   <Pressable
     onPress={onPress}
     disabled={disabled}
+    accessibilityRole="button"
+    accessibilityLabel={accessibilityLabel}
+    accessibilityState={{ disabled: Boolean(disabled) }}
+    // Ghost buttons are text-width; without slop the "←" was a 20pt target.
+    hitSlop={hitSlop ?? (variant === 'ghost' ? 10 : undefined)}
     style={({ pressed }) => [
       st.btn,
       variant === 'primary' && { backgroundColor: pressed ? C.accent600 : C.accent },
@@ -23,7 +31,7 @@ export const Btn = ({ label, onPress, variant = 'primary', disabled, style }) =>
       style,
     ]}
   >
-    <Text style={[st.btnLabel, variant === 'primary' && { color: C.bg }, variant === 'ghost' && { color: C.accent }]}>{label}</Text>
+    <Text style={[st.btnLabel, variant === 'primary' && { color: C.bg }, variant === 'ghost' && { color: C.accentText }]}>{label}</Text>
   </Pressable>
 );
 
@@ -33,12 +41,24 @@ export const Tag = ({ children, kind = 'accent' }) => (
   </Text>
 );
 
-export const BackHeader = ({ onBack, label }) => (
-  <View style={st.backHeader}>
-    <Btn variant="ghost" label="←" onPress={onBack} />
-    <Text style={st.stepLabel}>{label}</Text>
-  </View>
-);
+// `disabled` locks the way back — used while a payment is being confirmed,
+// when leaving would let the outcome land on some other screen.
+export const BackHeader = ({ onBack, label, disabled }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={st.backHeader}>
+      <Btn
+        variant="ghost"
+        label="←"
+        accessibilityLabel={t('common.backLabel')}
+        hitSlop={{ top: 12, bottom: 12, left: 16, right: 12 }}
+        onPress={onBack}
+        disabled={disabled}
+      />
+      <Text style={st.stepLabel} accessibilityRole="header">{label}</Text>
+    </View>
+  );
+};
 
 // Two-up card grid for bundles. Each card carries its own frame and the cards
 // sit apart, so a tap target reads as one object.
@@ -63,6 +83,8 @@ export const PackGrid = ({ items, onSelect, loading, art, title, body }) => {
           // network, so the display name alone collides.
           key={p.id ?? p.n}
           onPress={() => onSelect(p)}
+          accessibilityRole="button"
+          accessibilityLabel={[p.b, p.n, p.v, p.n === fmt(p.p) ? null : fmt(p.p)].filter(Boolean).join(', ')}
           style={({ pressed }) => [st.gridCell, pressed && { backgroundColor: C.accent100, borderColor: C.accent }]}
         >
           <View style={{ minHeight: 20 }}>{p.b ? <Tag>{p.b}</Tag> : null}</View>
@@ -116,6 +138,10 @@ export const PhoneInput = ({ value, onChangeText, country, onCountryChange, plac
           value={value}
           onChangeText={onChangeText}
           keyboardType="phone-pad"
+          textContentType="telephoneNumber"
+          autoComplete="tel"
+          returnKeyType="done"
+          accessibilityLabel={t('auth.phoneLabel')}
           placeholder={placeholder}
         />
       </View>
@@ -125,7 +151,7 @@ export const PhoneInput = ({ value, onChangeText, country, onCountryChange, plac
           a guess, and a silently wrong country sends the login code to a
           stranger — visible here, it is obvious before anything is sent. */}
       {value ? (
-        <Text style={{ marginTop: 6, fontSize: 12, fontFamily: F.semi, color: resolved ? C.muted : C.accent }}>
+        <Text style={{ marginTop: 6, fontSize: 12, fontFamily: F.semi, color: resolved ? C.muted : C.accentText }}>
           {resolved ? resolved : t('auth.numberUnresolved')}
         </Text>
       ) : null}
@@ -144,6 +170,9 @@ export const PhoneInput = ({ value, onChangeText, country, onCountryChange, plac
                     onCountryChange(c.code);
                     setPicking(false);
                   }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: c.code === selected.code }}
+                  accessibilityLabel={`${t(c.nameKey)}, +${c.dial}`}
                   style={({ pressed }) => [
                     st.packRow,
                     { paddingHorizontal: 20 },
@@ -192,6 +221,38 @@ export const EmptyState = ({ art: Art, title, body, cta, onCta, loading }) => {
   );
 };
 
+/**
+ * Order status, coloured by what it means rather than always red.
+ *
+ * Every state used to print in the accent, so DELIVERED and NOT DELIVERED
+ * looked identical in a list. Now: settled-good is plain ink, in-flight is
+ * muted, and anything that needs the customer's attention is the one line
+ * that carries red — as a filled tag, so it reads at a glance.
+ */
+export const ORDER_TONE = {
+  delivered: 'ok',
+  pending: 'wait',
+  paid: 'wait',
+  delivering: 'wait',
+  delivery_unknown: 'wait',
+  delivery_failed: 'bad',
+  failed: 'bad',
+  refunded: 'bad',
+};
+export const orderTone = (code) => ORDER_TONE[code] ?? 'wait';
+
+export const StatusText = ({ code, label }) => {
+  const tone = orderTone(code);
+  if (tone === 'bad') {
+    return (
+      <Text style={[st.tag, { backgroundColor: C.accent, color: C.bg, fontSize: 10, letterSpacing: 1, alignSelf: 'flex-end' }]}>{label}</Text>
+    );
+  }
+  return (
+    <Text style={{ fontSize: 10, letterSpacing: 1, fontFamily: F.semi, color: tone === 'ok' ? C.text : C.muted }}>{label}</Text>
+  );
+};
+
 export const SummaryRow = ({ k, v, bold }) => (
   <View style={st.sumRow}>
     <Text style={[st.sumKey, bold && st.sumBold]}>{k}</Text>
@@ -200,9 +261,15 @@ export const SummaryRow = ({ k, v, bold }) => (
 );
 
 export const Toggle2 = ({ opts, value, onChange }) => (
-  <View style={st.toggleWrap}>
+  <View style={st.toggleWrap} accessibilityRole="radiogroup">
     {opts.map((o) => (
-      <Pressable key={String(o.val)} onPress={() => onChange(o.val)} style={[st.toggleOpt, o.val === value && { backgroundColor: C.text }]}>
+      <Pressable
+        key={String(o.val)}
+        onPress={() => onChange(o.val)}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: o.val === value }}
+        style={[st.toggleOpt, o.val === value && { backgroundColor: C.text }]}
+      >
         <Text style={[st.toggleLabel, o.val === value && { color: C.bg }]}>{o.label}</Text>
       </Pressable>
     ))}
@@ -224,14 +291,19 @@ export const Brand = () => (
 // Bottom tab bar. `insetBottom` keeps labels clear of the home indicator
 // while the bar's background still bleeds to the physical screen edge.
 export const TabBar = ({ items, value, onChange, insetBottom = 0 }) => (
-  <View style={{ flexDirection: 'row', borderTopWidth: 2, borderColor: C.divider, paddingBottom: insetBottom }}>
+  <View style={{ flexDirection: 'row', borderTopWidth: 2, borderColor: C.divider, paddingBottom: insetBottom }} accessibilityRole="tablist">
     {items.map((n) => (
       <Pressable
         key={n.val}
         onPress={() => onChange(n.val)}
-        style={{ flex: 1, paddingVertical: 14, alignItems: 'center', borderTopWidth: 3, borderColor: value === n.val ? C.accent : 'transparent' }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: value === n.val }}
+        // 16 + 12 + 16 = 44pt row on devices with no home-indicator inset.
+        style={{ flex: 1, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', minHeight: 44, borderTopWidth: 3, borderColor: value === n.val ? C.accent : 'transparent' }}
       >
-        <Text style={{ fontFamily: F.heading, fontSize: 10, letterSpacing: 1.5, color: value === n.val ? C.accent : 'rgba(32,30,29,0.5)' }}>{n.label}</Text>
+        {/* 10px labels: deep red for the active tab and the standard muted
+            ink for the rest — the 0.5 alpha these used was 3.2:1. */}
+        <Text style={{ fontFamily: F.heading, fontSize: 10, letterSpacing: 1.5, color: value === n.val ? C.accentText : C.muted }}>{n.label}</Text>
       </Pressable>
     ))}
   </View>
@@ -245,7 +317,7 @@ export const st = StyleSheet.create({
   slideGlyph: { fontFamily: F.heading, fontSize: 96, lineHeight: 100, letterSpacing: -3 },
   h1: { fontFamily: F.heading, fontSize: 32, lineHeight: 35, color: C.text, letterSpacing: -0.6, marginTop: 8 },
   h2: { fontFamily: F.heading, fontSize: 24, color: C.text, letterSpacing: -0.4 },
-  kicker: { fontFamily: F.semi, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: C.accent, marginBottom: 4 },
+  kicker: { fontFamily: F.semi, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase', color: C.accentText, marginBottom: 4 },
   subText: { fontFamily: F.body, fontSize: 12, color: C.muted, lineHeight: 17 },
   rowTitle: { fontFamily: F.semi, fontSize: 14, color: C.text },
   tileLabel: { fontFamily: F.heading, fontSize: 14, letterSpacing: 0.8, color: C.text },
@@ -281,7 +353,7 @@ export const st = StyleSheet.create({
   },
   toggleWrap: { flexDirection: 'row', borderWidth: 1, borderColor: C.divider },
   toggleOpt: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  toggleLabel: { fontFamily: F.heading, fontSize: 13, letterSpacing: 0.8, color: 'rgba(32,30,29,0.65)' },
+  toggleLabel: { fontFamily: F.heading, fontSize: 13, letterSpacing: 0.8, color: C.muted70 },
   carrierCell: { flex: 1, borderWidth: 1, borderColor: C.divider, paddingVertical: 12, alignItems: 'center', gap: 2 },
   packRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 14, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: C.rule },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
@@ -289,9 +361,9 @@ export const st = StyleSheet.create({
   gridCell: { width: '48%', borderWidth: 2, borderColor: C.text, padding: 14, gap: 6, justifyContent: 'space-between', minHeight: 132 },
   packName: { fontFamily: F.heading, fontSize: 16, color: C.text },
   packPrice: { fontFamily: F.heading, fontSize: 14, color: C.text },
-  arrow: { color: C.accent, fontFamily: F.heading, fontSize: 16 },
+  arrow: { color: C.accentText, fontFamily: F.heading, fontSize: 16 },
   sumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderColor: C.rule },
-  sumKey: { fontFamily: F.body, fontSize: 14, color: 'rgba(32,30,29,0.6)' },
+  sumKey: { fontFamily: F.body, fontSize: 14, color: C.muted },
   sumVal: { fontFamily: F.semi, fontSize: 14, color: C.text },
   sumBold: { fontFamily: F.heading, color: C.text },
   payOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: C.divider },

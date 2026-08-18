@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { C, F, fmtN } from '@topup/core';
+import { C, F, fmtN, CUSTOM_AIRTIME, airtimeBonusFor } from '@topup/core';
 import { BackHeader, Btn, Kicker, Tag, st } from '../ui';
 
-export const MIN_AMOUNT = 100;
-export const MAX_AMOUNT = 500000;
+// Bounds come from core so the keypad and POST /checkout refuse the same figures.
+const MIN_AMOUNT = CUSTOM_AIRTIME.min;
+const MAX_AMOUNT = CUSTOM_AIRTIME.max;
 
 // Purpose-built keypad — the OS number pad can't be styled and its
 // return key has no meaning here.
@@ -20,7 +21,7 @@ export default function AmountScreen({ carrier, onBack, onConfirm }) {
   const amount = Number(digits || 0);
   const tooHigh = amount > MAX_AMOUNT;
   const valid = amount >= MIN_AMOUNT && !tooHigh;
-  const bonus = amount >= 5000 ? 10 : amount >= 1000 ? 5 : 0;
+  const bonus = airtimeBonusFor(amount) ? (amount >= 5000 ? 10 : 5) : 0;
 
   const press = (k) => {
     if (k === DEL) return setDigits((d) => d.slice(0, -1));
@@ -57,6 +58,8 @@ export default function AmountScreen({ carrier, onBack, onConfirm }) {
           <Pressable
             key={q}
             onPress={() => setDigits(String(q))}
+            accessibilityRole="button"
+            accessibilityLabel={`${fmtN(q)} FCFA`}
             style={({ pressed }) => [kp.quick, pressed && { backgroundColor: C.accent100, borderColor: C.accent }]}
           >
             <Text style={kp.quickLabel}>{fmtN(q)}</Text>
@@ -70,9 +73,11 @@ export default function AmountScreen({ carrier, onBack, onConfirm }) {
             <Pressable
               key={k}
               onPress={() => press(k)}
+              accessibilityRole="button"
+              accessibilityLabel={k === DEL ? t('amount.del') : k}
               style={({ pressed }) => [kp.key, pressed && { backgroundColor: C.accent100 }]}
             >
-              <Text style={[kp.keyLabel, k === DEL && { color: C.accent, fontSize: 15, letterSpacing: 1 }]}>{k === DEL ? t('amount.del') : k}</Text>
+              <Text style={[kp.keyLabel, k === DEL && { color: C.accentText, fontSize: 15, letterSpacing: 1 }]}>{k === DEL ? t('amount.del') : k}</Text>
             </Pressable>
           ))}
         </View>

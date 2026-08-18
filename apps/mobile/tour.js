@@ -244,14 +244,14 @@ export function TourOverlay({ steps, visible, onDone }) {
             gap: 10,
           }}
         >
-          <Text style={{ fontFamily: F.heading, fontSize: 11, letterSpacing: 1.2, color: C.accent }}>
+          <Text style={{ fontFamily: F.heading, fontSize: 11, letterSpacing: 1.2, color: C.accentText }}>
             {t('tour.progress', { current: index + 1, total: live.length })}
           </Text>
           <Text style={{ fontFamily: F.heading, fontSize: 18, color: C.text }}>{step.title}</Text>
           <Text style={{ fontFamily: F.body, fontSize: 13, color: C.text, opacity: 0.8 }}>{step.body}</Text>
 
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-            <Pressable onPress={finish} hitSlop={10}>
+            <Pressable onPress={finish} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('tour.skip')}>
               <Text style={{ fontFamily: F.heading, fontSize: 12, letterSpacing: 1, color: C.text, opacity: 0.6 }}>
                 {t('tour.skip')}
               </Text>
@@ -259,6 +259,8 @@ export function TourOverlay({ steps, visible, onDone }) {
             <Pressable
               onPress={advance}
               hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={last ? t('tour.done') : t('tour.next')}
               style={({ pressed }) => [
                 { backgroundColor: pressed ? C.accent600 : C.accent, paddingHorizontal: 16, paddingVertical: 10 },
               ]}

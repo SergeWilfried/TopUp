@@ -3,7 +3,7 @@
 // Navigation is a simple screen state machine; swap for react-navigation if preferred.
 // Tab destinations live in ./screens; shared primitives in ./ui; catalogue in ./data.
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, StatusBar, Alert, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, StatusBar, Alert, Linking, KeyboardAvoidingView, Platform, BackHandler } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,7 +14,7 @@ import './i18n';
 import { loadStoredLanguage } from './i18n';
 
 import { TOURS, TourOverlay, TourProvider, TourTarget, tourFor, tourStoreKey } from './tour';
-import { C, F, fmt, fmtN, CARRIERS, countryFromCanonical, detect, flagFor, navItems, networksFor, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
+import { C, F, fmt, fmtN, airtimeBonusFor, canonicalMsisdn, countryFromCanonical, detect, flagFor, navItems, networksFor, prefixFor, toE164, toNational, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
 import {
   ApiError,
   catalogue as fetchCatalogue,
@@ -22,6 +22,7 @@ import {
   esimPlans as fetchEsimPlans,
   loadSession,
   me,
+  myEsims,
   myOrders,
   provisionPeer,
   requestCode,
@@ -33,7 +34,9 @@ import {
   paymentMethods,
 } from './api';
 import { detectCountry, deviceCountry, formatMoney, methodsFor } from './payment';
-import { Btn, BackHeader, EmptyState, Kicker, Tag, PackGrid, PhoneInput, SummaryRow, Toggle2, TabBar, Brand, st } from './ui';
+import { hasWhatsApp, openEmail, openWhatsApp, SUPPORT_EMAIL } from './support';
+import { ProviderBadge, ProviderLogo } from './providers';
+import { Btn, BackHeader, EmptyState, Kicker, Tag, PackGrid, PhoneInput, SummaryRow, StatusText, Toggle2, TabBar, Brand, orderTone, st } from './ui';
 import { NoEsim, NoLocations, NoResults, Offline } from './illustrations';
 import Onboarding from './screens/Onboarding';
 import HomeScreen from './screens/HomeScreen';
@@ -47,6 +50,7 @@ import VpnSetupScreen from './screens/VpnSetupScreen';
 import VpnScreen from './screens/VpnScreen';
 import VpnRecoverScreen from './screens/VpnRecoverScreen';
 import LanguageScreen from './screens/LanguageScreen';
+import { EsimDetailScreen, EsimInstallCard, EsimListScreen } from './screens/EsimScreens';
 
 // Which locations have been exported into WireGuard on this handset. Local by
 // nature: the server knows the peer exists, not whether the file was imported.
@@ -61,6 +65,18 @@ const VPN_ADDED_STORE = 'topup.vpn.added';
  * survives a signed-out session.
  */
 const LAST_BUY_STORE = 'topup.lastBuy';
+
+/**
+ * The network the account's own line is on.
+ *
+ * `/me` does not carry it, and the wallet a customer pays from is not reliably
+ * the SIM they are topping up. So it is learned from what they tell us: the
+ * network they last topped their own line up with, or the one detected from
+ * their number at sign-in. Used to pre-select the network on "for myself" so
+ * a repeat customer never has to pick it again — and cleared at sign-out,
+ * since it belongs to the account, not the handset.
+ */
+const MY_CARRIER_STORE = 'topup.myCarrier';
 
 /**
  * Where the country pickers start.
@@ -93,12 +109,33 @@ const toPack = (p) => ({
   carrier: p.network,
 });
 
-/** An order row as the history list wants it. */
-const toHistoryRow = (o, t) => ({
+/**
+ * A free amount of airtime as the pay step wants it.
+ *
+ * `custom` is what tells checkout to send an amount and a network instead of a
+ * product id; the server rebuilds the same shape on its side, so a 1 500 F
+ * custom top-up is priced, fee'd and delivered exactly like a 1 500 F pack.
+ */
+const customPack = (amount, t) => ({
+  custom: true,
+  n: fmtN(amount) + ' FCFA',
+  v: t('packs.airtimeCredit'),
+  p: amount,
+  b: airtimeBonusFor(amount),
+});
+
+/**
+ * An order row as the lists want it. Keeps the raw order too — the detail
+ * screen prints reference, dates and failure reason straight from it.
+ */
+const toHistoryRow = (o, t, lang) => ({
+  id: o.id,
   desc: o.detail,
-  meta: `${new Date(o.createdAt).toLocaleDateString()} · ${String(o.product).toUpperCase()}`,
+  meta: `${new Date(o.createdAt).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-GB')} · ${String(o.product).toUpperCase()}`,
   amount: fmt(o.amount),
+  code: o.status,
   status: t(`common.orderStatus.${o.status}`, String(o.status).toUpperCase()),
+  raw: o,
 });
 
 function TopUp() {
@@ -111,6 +148,7 @@ function TopUp() {
   const [forSelf, setForSelf] = useState(true);
   const [phone, setPhone] = useState('');
   const [myNumber, setMyNumber] = useState(''); // the account's own MSISDN, for "top up myself"
+  const [myCarrier, setMyCarrier] = useState(null); // network of the account's own line, when known
   const [carrier, setCarrier] = useState('Orange');
   const [pack, setPack] = useState(null);
   const [pay, setPay] = useState(null); // method id, chosen from what the region supports
@@ -119,11 +157,21 @@ function TopUp() {
   const [otp, setOtp] = useState('');
   const [otpError, setOtpError] = useState(null); // error code, or null
   const [verifying, setVerifying] = useState(false);
+  // When the code may be re-requested. Twilio rate-limits sends, and a
+  // customer hammering RESEND is the fastest way to lock themselves out.
+  const [resendAt, setResendAt] = useState(0);
   const [email, setEmail] = useState(''); // where VPN configs get delivered
   const [esimCountry, setEsimCountry] = useState('Côte d’Ivoire');
   const [countrySearch, setCountrySearch] = useState('');
-  const [esims, setEsims] = useState([]);
+  const [esims, setEsims] = useState([]); // profiles the account owns, from /me/esims
+  const [viewEsim, setViewEsim] = useState(null); // the one open on the detail screen
+  const [topUpIccid, setTopUpIccid] = useState(null); // set when a plan is bought for an existing profile
   const [history, setHistory] = useState([]);
+  // True while /me/orders is in flight, so an empty list can say "loading"
+  // rather than asserting "no purchases yet" before the answer is in.
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [viewOrder, setViewOrder] = useState(null); // row open on the order screen
+  const [orderFrom, setOrderFrom] = useState('history'); // where its ← returns to
   const [booted, setBooted] = useState(false);
   const [vpn, setVpn] = useState(null); // active VPN subscription, from /me
   const [vpnLoc, setVpnLoc] = useState(null); // location being installed (setup step 02)
@@ -143,6 +191,22 @@ function TopUp() {
   const [esimPlanList, setEsimPlanList] = useState([]);
   const [payError, setPayError] = useState(null);
   const [order, setOrder] = useState(null); // in-flight purchase
+  /**
+   * What the success screen prints. Captured at the moment the order is
+   * confirmed — reference, what was actually charged, the fee — rather than
+   * re-derived from `pack.p`, which is the list price and not the figure on
+   * the customer's wallet statement.
+   */
+  const [receipt, setReceipt] = useState(null);
+  const [copiedRef, setCopiedRef] = useState(false);
+  // How long the customer has been waiting on the wallet, for the panel copy.
+  const [waitStart, setWaitStart] = useState(null);
+  const [nowTick, setNowTick] = useState(0);
+  // Cancels the poll: on STOP WAITING, or if the pay screen is somehow left.
+  const payAbort = React.useRef(null);
+  // The screen at the moment a long await returns — a purchase must not
+  // teleport someone who is elsewhere by then.
+  const screenRef = React.useRef('onboarding');
   const [quote, setQuote] = useState(null); // what this market is actually charged
   const [dialable, setDialable] = useState([]); // wallets payable by dialling
   const [lastBuy, setLastBuy] = useState(null); // the repeatable purchase
@@ -242,6 +306,44 @@ function TopUp() {
     });
   }, []);
 
+  useEffect(() => { screenRef.current = screen; }, [screen]);
+
+  /**
+   * Android hardware back.
+   *
+   * The app is a screen state machine, so without this the system button
+   * left the app from every screen — including mid-payment. The listener is
+   * registered once and dispatches through a ref, which the render below
+   * keeps pointed at a closure over the current state.
+   */
+  const onHardwareBack = React.useRef(() => false);
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => onHardwareBack.current());
+    return () => sub.remove();
+  }, []);
+
+  // A one-second tick while a wallet approval is pending, so the panel can
+  // say how long it has been — silence past thirty seconds reads as a hang.
+  useEffect(() => {
+    if (!waitStart) return;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [waitStart]);
+
+  // The resend countdown needs a clock while the OTP screen is up.
+  useEffect(() => {
+    if (screen !== 'otp') return;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [screen]);
+
+  // Leaving the pay screen mid-poll (Android back, a future deep link) must
+  // stop the poll: otherwise it resolves minutes later and pushes a success
+  // or error onto whatever the customer is doing by then.
+  useEffect(() => {
+    if (screen !== 'pay' && payAbort.current) payAbort.current.abort();
+  }, [screen]);
+
   /** True unless the market has explicitly switched this off. */
   const featureOn = React.useCallback((name) => features?.[name] !== false, [features]);
 
@@ -254,9 +356,9 @@ function TopUp() {
    * asked rather than approximated here.
    */
   useEffect(() => {
-    if (screen !== 'pay' || !pack?.id) { setQuote(null); return; }
+    if (screen !== 'pay' || !(pack?.id || pack?.custom)) { setQuote(null); return; }
     let alive = true;
-    paymentMethods(country, pack.id)
+    paymentMethods(country, pack.id, pack.custom ? pack.p : undefined)
       .then((r) => {
         if (!alive) return;
         setQuote(r.quote ?? null);
@@ -264,7 +366,7 @@ function TopUp() {
       })
       .catch(() => alive && setQuote(null));
     return () => { alive = false; };
-  }, [screen, pack?.id, country]);
+  }, [screen, pack?.id, pack?.custom, pack?.p, country]);
 
   /**
    * Pulls everything the signed-in account owns.
@@ -274,13 +376,28 @@ function TopUp() {
    * refund shows up here without the app having to guess.
    */
   const refreshAccount = React.useCallback(async () => {
-    const [account, orders] = await Promise.all([
-      me().catch(() => null),
+    setAccountLoading(true);
+    const [account, orders, ownedEsims] = await Promise.all([
+      // A 401 means the stored session is dead (expired, or signed out on
+      // another handset). api.js has already dropped the token; the screen
+      // has to follow, or the customer sits on a home page with no account.
+      me().catch((e) => (e instanceof ApiError && e.status === 401 ? 'unauthorized' : null)),
       myOrders(i18n.language?.slice(0, 2)).catch(() => null),
-    ]);
+      myEsims().catch(() => null),
+    ]).finally(() => setAccountLoading(false));
+    if (account === 'unauthorized') {
+      setMyNumber('');
+      setHistory([]);
+      setPoints(0);
+      setAuthFrom('welcome');
+      setScreen('welcome');
+      return;
+    }
     if (account) {
       setMyNumber(account.msisdn || '');
-      setPhone((p) => p || account.msisdn || '');
+      // National form for the field: the E.164 digits under a picker already
+      // showing the dialling code read as a doubled prefix.
+      setPhone((p) => p || (account.msisdn ? toNational(account.msisdn, countryFromCanonical(account.msisdn)) : ''));
       if (account.email) setEmail((e) => e || account.email);
       setVpn(
         account.subscriptionActive
@@ -293,45 +410,54 @@ function TopUp() {
           : null,
       );
     }
+    if (ownedEsims) setEsims(ownedEsims.esims ?? []);
     if (orders) {
       setPoints(orders.points ?? 0);
-      setHistory((orders.orders ?? []).map((o) => toHistoryRow(o, t)));
+      setHistory((orders.orders ?? []).map((o) => toHistoryRow(o, t, i18n.language?.slice(0, 2))));
     }
   }, [t]);
 
   // Catalogue and locations are public, so they load before sign-in — the
   // plans and packs are browsable without an account.
+  //
+  // They are *started* here but not *awaited*: boot used to block on both,
+  // which on a slow connection meant seconds of blank frame after the splash.
+  // Every screen that needs them already distinguishes "not yet" from "empty",
+  // so they can arrive whenever they arrive.
   useEffect(() => {
     let alive = true;
     const lang = i18n.language?.slice(0, 2) || 'en';
+    fetchCatalogue(lang)
+      .then((data) => { if (alive) setCat(data); })
+      .catch(() => { if (alive) setCatFailed(true); });
+    vpnServers()
+      .then((r) => { if (alive) setLocations(r.servers ?? []); })
+      .catch(() => {});
     Promise.all([
       loadStoredLanguage(),
-      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE, LAST_BUY_STORE, ...Object.keys(TOURS).map(tourStoreKey)]).catch(() => []),
+      AsyncStorage.multiGet([SEEN_ONBOARDING, VPN_ADDED_STORE, LAST_BUY_STORE, MY_CARRIER_STORE, ...Object.keys(TOURS).map(tourStoreKey)]).catch(() => []),
       loadSession().catch(() => null),
-      fetchCatalogue(lang).catch(() => null),
-      vpnServers().catch(() => null),
-    ]).then(async ([, pairs, token, catalogueData, servers]) => {
+    ]).then(async ([, pairs, token]) => {
       if (!alive) return;
       const stored = Object.fromEntries(pairs || []);
       if (stored[SEEN_ONBOARDING]) { setScreen('welcome'); setAuthFrom('welcome'); }
       try {
         setVpnAdded(JSON.parse(stored[VPN_ADDED_STORE] || '[]'));
         if (stored[LAST_BUY_STORE]) setLastBuy(JSON.parse(stored[LAST_BUY_STORE]));
+        if (stored[MY_CARRIER_STORE]) setMyCarrier(stored[MY_CARRIER_STORE]);
         setSeenTours(
           Object.fromEntries(Object.keys(TOURS).map((n) => [n, Boolean(stored[tourStoreKey(n)])])),
         );
       } catch {
         // Corrupt record — start clean rather than block launch.
       }
-      if (catalogueData) setCat(catalogueData);
-      else setCatFailed(true);
-      if (servers) setLocations(servers.servers ?? []);
-
-      // A stored session skips sign-in on relaunch, but only if it still works:
-      // the token may have expired or been signed out on another device.
+      // A stored session skips sign-in on relaunch. The account refresh is
+      // not awaited either: home renders at once with its lists in the
+      // "loading" state, and fills in when /me/orders answers. A dead token is
+      // cleared by the 401 handler, at which point the app is signed out.
       if (token) {
-        await refreshAccount().catch(() => {});
-        if (alive) setScreen('home');
+        setScreen('home');
+        refreshAccount().catch(() => {});
       }
       if (alive) setBooted(true);
     });
@@ -345,9 +471,131 @@ function TopUp() {
     AsyncStorage.setItem(VPN_ADDED_STORE, JSON.stringify(vpnAdded)).catch(() => {});
   }, [booted, vpnAdded]);
 
+  /**
+   * Networks a top-up can be delivered to in the recipient's country.
+   *
+   * The known operator list first, then anything the catalogue actually sells
+   * into that market that the list has missed — a distributor can add a
+   * network before we do. Prefix hints only appear for markets whose numbering
+   * plan we hold; elsewhere the customer simply picks.
+   *
+   * Declared above the boot guard because the clamp effect below depends on
+   * it, and hooks have to run on every render.
+   */
+  const networkOptions = React.useMemo(() => {
+    const known = networksFor(recipientCountry);
+    const sold = [...(cat?.airtime ?? []), ...(cat?.data ?? [])]
+      .filter((p) => p.country === recipientCountry && p.network)
+      .map((p) => p.network);
+    const names = [...new Set([...known, ...sold])];
+    return names.map((name) => ({ name, prefix: prefixFor(recipientCountry, name) }));
+  }, [recipientCountry, cat]);
+
+  /**
+   * Keeps the chosen network inside what the recipient's country offers.
+   *
+   * `carrier` outlives the screen that set it — sign-in guesses one from the
+   * account's own number, a previous purchase leaves another — so by the time
+   * the recipient form opens it can name a network this country does not
+   * have. Nothing was highlighted, CONTINUE still worked, and the pack list
+   * came up empty. Now: keep it if it is offered, take the number's own hint
+   * if that is, take the only option when there is one, and otherwise clear
+   * it so the customer has to choose. Never the first in the list by default —
+   * credit sent to the wrong network cannot be recovered.
+   */
+  useEffect(() => {
+    if (screen !== 'recipient') return;
+    if (networkOptions.some((c) => c.name === carrier)) return;
+    const guessed = detect(phone, recipientCountry);
+    if (guessed && networkOptions.some((c) => c.name === guessed)) setCarrier(guessed);
+    else if (networkOptions.length === 1) setCarrier(networkOptions[0].name);
+    else setCarrier(null);
+  }, [screen, recipientCountry, networkOptions, carrier, phone]);
+
   if (!fontsLoaded || !booted) return null;
 
-  const momoName = carrier === 'MTN' ? 'MTN MoMo' : carrier + ' Money';
+  const carrierOk = networkOptions.some((c) => c.name === carrier);
+
+  /**
+   * Shared tail of both wallet panels: the reference (what support asks for),
+   * how long we have been waiting, and a way to stop without leaving. Stopping
+   * ends the poll only — the order stands and turns up in History.
+   */
+  /**
+   * Where the system back button goes from each screen — the same targets the
+   * on-screen ← uses, so the two never disagree. `null` means "let the OS
+   * handle it" (leave the app), which is only right on the entry screens and
+   * the home tab; every other tab goes home first.
+   */
+  const hardwareBackTarget = () => {
+    switch (screen) {
+      case 'onboarding':
+      case 'welcome':
+      case 'home':
+        return null;
+      case 'history':
+      case 'rewards':
+      case 'profile':
+      case 'recipient':
+      case 'success':
+        return 'home';
+      case 'login':
+        return authFrom;
+      case 'otp':
+        return 'login';
+      case 'packs':
+        return 'recipient';
+      case 'amount':
+        return 'packs';
+      case 'pay':
+        // Locked while a payment is being confirmed, like the on-screen ←.
+        return paying ? 'stay' : isVpn ? 'vpnPlans' : service === 'esim' ? 'esimPlans' : 'packs';
+      case 'esim':
+      case 'language':
+      case 'vpn':
+        return 'profile';
+      case 'order':
+        return orderFrom;
+      case 'esimCountry':
+      case 'esimDetail':
+        return 'esim';
+      case 'esimPlans':
+        return topUpIccid ? 'esim' : 'esimCountry';
+      case 'vpnPlans':
+        return vpn ? 'vpn' : 'home';
+      case 'vpnLocations':
+        setVpnFresh(false);
+        return 'vpn';
+      case 'vpnSetup':
+        return 'vpnLocations';
+      case 'vpnRecover':
+        return recoverFrom;
+      default:
+        return 'home';
+    }
+  };
+  onHardwareBack.current = () => {
+    if (tourOpen) { endTour(); return true; }
+    const target = hardwareBackTarget();
+    if (target === null) return false;
+    if (target !== 'stay') setScreen(target);
+    return true;
+  };
+
+  /** Stops polling. The order stands; it will show in History either way. */
+  const stopWaiting = () => payAbort.current?.abort();
+  const waitSeconds = waitStart ? Math.max(0, Math.floor(((nowTick || Date.now()) - waitStart) / 1000)) : 0;
+  const waitingFooter = order?.orderId ? (
+    <View style={{ borderTopWidth: 1, borderColor: C.rule, paddingTop: 10, gap: 6 }}>
+      <View style={st.rowBetween}>
+        <Text style={[st.subText, { fontFamily: F.semi }]}>{t('pay.orderRef', { ref: order.orderId })}</Text>
+        <Text style={st.subText}>{t('pay.waitingFor', { seconds: waitSeconds })}</Text>
+      </View>
+      <Btn variant="ghost" label={t('pay.stopWaiting')} onPress={stopWaiting} style={{ alignSelf: 'flex-start' }} />
+    </View>
+  ) : null;
+
+  const momoName = carrier === 'MTN' ? 'MTN MoMo' : carrier ? carrier + ' Money' : '';
   const payment = methodsFor(country, dialable);
   // Default to the first method the region actually offers.
   const method = payment.methods.find((m) => m.id === pay) ?? payment.methods[0] ?? null;
@@ -369,17 +617,27 @@ function TopUp() {
    */
   const finishPay = async () => {
     const renewing = isVpn && !!vpn;
+    // Compared in canonical form: the field holds a national number now, and
+    // the account's is E.164 digits — a raw string compare would call the
+    // customer's own line "someone else" and send it as a recipient.
+    const toSelf = !!myNumber && canonicalMsisdn(phone, recipientCountry) === myNumber;
     setPaying(true);
     setPayError(null);
+    setReceipt(null);
+    const controller = new AbortController();
+    payAbort.current = controller;
     try {
       const started = await startCheckout({
-        productId: pack.id,
+        productId: pack.custom ? undefined : pack.id,
+        amount: pack.custom ? pack.p : undefined,
+        network: pack.custom ? carrier : undefined,
+        iccid: service === 'esim' && topUpIccid ? topUpIccid : undefined,
         country,
         // The wallet charged is always the buyer's own. Sending the recipient's
         // number here would push the approval prompt to them instead.
         msisdn: isMomo ? myNumber || phone : undefined,
         // Only meaningful when topping up someone else's line.
-        recipientMsisdn: !isVpn && service !== 'esim' && phone !== myNumber ? phone : undefined,
+        recipientMsisdn: !isVpn && service !== 'esim' && !toSelf ? phone : undefined,
         // The picker's value: delivery needs the recipient's dialling code, and
         // it is not always the buyer's.
         recipientCountry,
@@ -388,14 +646,18 @@ function TopUp() {
         carrier: isDial ? method.carrier : undefined,
       });
       setOrder(started);
+      setWaitStart(Date.now());
 
       if (started.action === 'redirect' && started.url) {
         await WebBrowser.openBrowserAsync(started.url).catch(() => {});
       }
 
-      const final = await waitForOrder(started.orderId);
+      const final = await waitForOrder(started.orderId, { signal: controller.signal });
       if (final.status !== 'delivered') {
         setPayError(final.failureReason || `order_${final.status}`);
+        // The order exists whatever happened to it; the customer's history is
+        // where they will look for it, so it must be current before they do.
+        await refreshAccount().catch(() => {});
         return;
       }
 
@@ -403,11 +665,34 @@ function TopUp() {
       // than being incremented locally, so the app cannot drift from the books.
       await refreshAccount();
 
+      // The quote the order was placed on is what the wallet took. Fall back
+      // to the screen's quote, then the list price, only if the response had
+      // none — an older worker, or a zero-fee product.
+      const q = started.quote ?? quote ?? null;
+      setReceipt({
+        orderId: started.orderId,
+        service,
+        to: isVpn ? null : service === 'esim' ? null : (toE164(phone, recipientCountry) ?? phone),
+        network: isVpn ? null : carrier,
+        pack: pack?.n ?? '—',
+        currency: q?.currency ?? 'XOF',
+        amount: q?.amount ?? pack?.p ?? 0,
+        amountXof: q?.amountXof ?? pack?.p ?? 0,
+        fee: q?.fee ?? 0,
+        feeXof: q?.feeXof ?? 0,
+        feePct: q?.feePct ?? 0,
+        createdAt: Date.now(),
+        // The provisioned profile, when this was an eSIM: the success screen
+        // shows the real QR and install links from it.
+        esim: final.esim ?? null,
+      });
+
       // Remembered only on success, and only for the things worth repeating —
       // a VPN plan or an eSIM is not a habitual purchase.
-      if (!isVpn && service !== 'esim' && pack?.id) {
+      if (!isVpn && service !== 'esim' && (pack?.id || pack?.custom)) {
         const repeat = {
-          productId: pack.id,
+          productId: pack.custom ? null : pack.id,
+          customAmount: pack.custom ? pack.p : null,
           label: pack.n,
           price: pack.p,
           service,
@@ -418,9 +703,20 @@ function TopUp() {
         };
         setLastBuy(repeat);
         AsyncStorage.setItem(LAST_BUY_STORE, JSON.stringify(repeat)).catch(() => {});
+        // A successful top-up of their own line is the best evidence of which
+        // network it is on; remember it so "for myself" pre-selects it.
+        if (toSelf && carrier) {
+          setMyCarrier(carrier);
+          AsyncStorage.setItem(MY_CARRIER_STORE, carrier).catch(() => {});
+        }
       }
 
       setOrder(null);
+      // Only move on if the customer is still here to be moved. Back is
+      // disabled while paying, so this is belt-and-braces for the paths that
+      // bypass it — but a purchase surfacing on the wrong screen is exactly
+      // the failure worth two lines.
+      if (screenRef.current !== 'pay') return;
       if (isVpn) {
         // Renewing changes nothing they have to re-scan, so don't send them
         // back through setup — only a first purchase needs that.
@@ -431,10 +727,18 @@ function TopUp() {
       }
     } catch (e) {
       setPayError(e instanceof ApiError ? e.code : 'network_error');
+      // Cancelled or timed out is not "nothing happened" — the order may still
+      // complete. Pull history so a pending row is there when they look.
+      if (e instanceof ApiError && (e.code === 'cancelled' || e.code === 'timeout')) {
+        await refreshAccount().catch(() => {});
+      }
     } finally {
+      payAbort.current = null;
+      setWaitStart(null);
       setPaying(false);
     }
   };
+
   // Sign-out must actually clear the session: the VPN record is persisted, so
   // leaving it behind would hand the next person on this handset a paid
   // subscription. Configs stay recoverable by email from the welcome screen.
@@ -458,6 +762,8 @@ function TopUp() {
           setPoints(0);
           setPhone('');
           setCarrier('Orange');
+          setMyCarrier(null);
+          AsyncStorage.removeItem(MY_CARRIER_STORE).catch(() => {});
           setEmail('');
           setPack(null);
           setService('data');
@@ -475,15 +781,37 @@ function TopUp() {
     if (paying || !pack || (isVpn && !emailOk)) return;
     finishPay();
   };
-  /**
-   * Networks available on the recipient's line. Only Côte d'Ivoire has prefix
-   * hints, because that is the only numbering plan we actually hold.
-   */
-  const networkOptions =
-    recipientCountry === 'CI'
-      ? CARRIERS
-      : networksFor(recipientCountry).map((name) => ({ name, prefix: null }));
 
+  /**
+   * Requests an SMS code — from the sign-in button and from RESEND on the code
+   * screen, so the two cannot drift. A network at sign-in is a first guess at
+   * the account's own line, remembered for "for myself".
+   */
+  const RESEND_COOLDOWN_MS = 30000;
+  const sendCode = async ({ resend = false } = {}) => {
+    if (verifying) return;
+    if (!resend) {
+      const own = detect(phone, dialCountry);
+      setCarrier(own || carrier);
+      if (own) {
+        setMyCarrier(own);
+        AsyncStorage.setItem(MY_CARRIER_STORE, own).catch(() => {});
+      }
+    }
+    setOtp('');
+    setOtpError(null);
+    setVerifying(true);
+    try {
+      await requestCode(phone, dialCountry);
+      setResendAt(Date.now() + RESEND_COOLDOWN_MS);
+      if (!resend) setScreen('otp');
+    } catch (e) {
+      setOtpError(e instanceof ApiError ? e.code : 'network_error');
+    } finally {
+      setVerifying(false);
+    }
+  };
+  const resendIn = Math.max(0, Math.ceil((resendAt - (nowTick || Date.now())) / 1000));
   // The deal tile and the button under it must name the same catalogue line.
   //
   // No fallback to the first product on purpose. Data rows are synced from the
@@ -501,8 +829,50 @@ function TopUp() {
     (service === 'airtime' ? cat?.airtime : cat?.data)
       ?.filter((p) => !p.network || p.network === carrier)
       .map(toPack) ?? [];
-  const goBuy = (svc) => { setService(svc); setForSelf(true); setScreen('recipient'); };
-  const openPack = (p) => { setPack(p); setScreen('pay'); };
+  /**
+   * Puts the recipient form in its "for myself" state: the account's own line
+   * in national form, its country as the delivery country, and its network
+   * pre-selected when we know it. Shared by the quick-buy tiles and the toggle
+   * so both arrive at the same screen.
+   */
+  const selectSelf = () => {
+    setForSelf(true);
+    setRecipientCountry(country);
+    setPhone(myNumber ? toNational(myNumber, country) : '');
+    if (myCarrier) setCarrier(myCarrier); // the clamp effect drops it if the country does not offer it
+  };
+  const goBuy = (svc) => { setService(svc); selectSelf(); setScreen('recipient'); };
+  const openOrder = (row, from) => { setViewOrder(row); setOrderFrom(from); setScreen('order'); };
+  /**
+   * A top-up is a plan bought for a profile the customer already has: same
+   * plan list as a first purchase for that destination, with the ICCID carried
+   * through checkout so the provider adds the plan rather than issuing a new
+   * profile.
+   */
+  const topUpEsim = async (e) => {
+    const dest = (cat?.esimDestinations ?? []).find((d) => d.code === e.country) ?? null;
+    setTopUpIccid(e.iccid);
+    setEsimCountry(dest?.name ?? e.country ?? '');
+    setEsimPlanList([]);
+    setScreen('esimPlans');
+    if (dest) {
+      const res = await fetchEsimPlans(dest.name, i18n.language?.slice(0, 2) || 'en').catch(() => null);
+      if (res) setEsimPlanList(res.plans.map(toPack));
+    }
+  };
+  /**
+   * Reaches support with the order reference already in the message — the
+   * one thing they will ask for, and the one thing a customer on the phone
+   * cannot easily read out.
+   */
+  const contactSupport = (ref) => {
+    const subject = t('support.subject', { ref: ref ?? '—' });
+    const body = t('support.body', { ref: ref ?? '—', phone: myNumber ? '+' + myNumber : phone });
+    if (hasWhatsApp()) openWhatsApp(t, `${subject}\n${body}`);
+    else openEmail(t, subject, body);
+  };
+  // A fresh pack is a fresh attempt: the last one's error must not follow it.
+  const openPack = (p) => { setPack(p); setPayError(null); setOrder(null); setScreen('pay'); };
   const showNav = TAB_SCREENS.includes(screen);
 
   return (
@@ -510,6 +880,11 @@ function TopUp() {
     // background still bleeds past the home indicator.
     <View style={{ flex: 1, backgroundColor: C.bg, paddingTop: insets.top, paddingBottom: showNav ? 0 : insets.bottom }}>
       <StatusBar barStyle="dark-content" />
+      {/* One avoider for every screen: the email field on the VPN payment
+          step and the number field on the recipient form both sat under the
+          keyboard, and every button below an input needed a second tap. Android
+          resizes the window itself, so only iOS gets padding. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
 
       {/* First run goes straight to auth; 'welcome' is the returning-user entry after sign out. */}
       {screen === 'onboarding' && (
@@ -558,25 +933,12 @@ function TopUp() {
                 onCountryChange={setDialCountry}
                 placeholder={t('auth.phonePlaceholder')}
               />
-              {detect(phone) ? <Text style={{ color: C.accent, fontSize: 12, marginTop: 6, fontFamily: F.body }}>{t('auth.detected', { carrier: detect(phone) })}</Text> : null}
+              {detect(phone, dialCountry) ? <Text style={{ color: C.accentText, fontSize: 12, marginTop: 6, fontFamily: F.body }}>{t('auth.detected', { carrier: detect(phone, dialCountry) })}</Text> : null}
             </View>
             <Btn
               label={verifying ? t('auth.verifying') : t('auth.sendCode')}
               disabled={digits.length < 8 || verifying}
-              onPress={async () => {
-                setCarrier(detect(phone) || carrier);
-                setOtp('');
-                setOtpError(null);
-                setVerifying(true);
-                try {
-                  await requestCode(phone, dialCountry);
-                  setScreen('otp');
-                } catch (e) {
-                  setOtpError(e instanceof ApiError ? e.code : 'network_error');
-                } finally {
-                  setVerifying(false);
-                }
-              }}
+              onPress={() => sendCode()}
             />
             {/* A failed send used to leave this screen completely silent: the
                 button finished, nothing moved, and no reason was given. */}
@@ -606,11 +968,18 @@ function TopUp() {
               <Text style={st.h2}>{t('auth.enterCode')}</Text>
               <Text style={st.subText}>{t('auth.sentTo')} <Text style={{ fontFamily: F.semi }}>{phone}</Text></Text>
             </View>
+            {/* Focused on arrival and tagged as a one-time code, so iOS and
+                Android offer the SMS code above the keyboard instead of
+                making the customer read and retype six digits. */}
             <TextInput
               style={[st.input, { fontSize: 32, fontFamily: F.heading, letterSpacing: 16, textAlign: 'center', minHeight: 64 }]}
               value={otp}
               onChangeText={(v) => { setOtp(v.replace(/\D/g, '').slice(0, 6)); setOtpError(null); }}
               keyboardType="number-pad" placeholder="000000" maxLength={6}
+              autoFocus
+              textContentType="oneTimeCode"
+              autoComplete="sms-otp"
+              accessibilityLabel={t('auth.enterCode')}
             />
             {otpError && (
               <View style={{ borderWidth: 2, borderColor: C.accent, padding: 12 }}>
@@ -635,6 +1004,16 @@ function TopUp() {
                 }
               }}
             />
+            {/* A late SMS used to mean going back and retyping the number.
+                Held for 30 s after each send so the button cannot be used to
+                burn through the provider's rate limit. */}
+            <Btn
+              variant="ghost"
+              label={resendIn > 0 ? t('auth.resendIn', { seconds: resendIn }) : t('auth.resend')}
+              disabled={resendIn > 0 || verifying}
+              onPress={() => sendCode({ resend: true })}
+              style={{ alignSelf: 'flex-start' }}
+            />
           </View>
         </View>
       )}
@@ -643,26 +1022,31 @@ function TopUp() {
         <HomeScreen
           points={points}
           history={history}
+          loading={accountLoading}
           deal={deal ? toPack(deal) : null}
           lastBuy={lastBuy}
           // Straight to payment: the pack, the line and the wallet are all
           // known, so there is nothing left to ask.
           onRepeat={() => {
-            const p = (cat?.[lastBuy.service] ?? []).find((x) => x.id === lastBuy.productId);
-            if (!p) return; // withdrawn from the catalogue since
+            const p = lastBuy.customAmount
+              ? null
+              : (cat?.[lastBuy.service] ?? []).find((x) => x.id === lastBuy.productId);
+            if (!p && !lastBuy.customAmount) return; // withdrawn from the catalogue since
             // One tap goes straight to payment, skipping every screen that
             // would otherwise have hidden a switched-off service.
             if (!featureOn(lastBuy.service)) return;
+            if (lastBuy.customAmount && !featureOn('customAmount')) return;
             setService(lastBuy.service);
             setCarrier(lastBuy.carrier);
             setPhone(lastBuy.recipient);
             setRecipientCountry(lastBuy.recipientCountry);
             if (lastBuy.methodId) setPay(lastBuy.methodId);
-            setPack(toPack(p));
+            setPack(lastBuy.customAmount ? customPack(lastBuy.customAmount, t) : toPack(p));
             setPayError(null);
             setScreen('pay');
           }}
           onBuy={goBuy}
+          onOpenOrder={(row) => openOrder(row, 'home')}
           // The deal has to be a real catalogue line: checkout buys a product id,
           // and a hand-built pack has nothing to charge against.
           onDailyDeal={() => {
@@ -682,7 +1066,7 @@ function TopUp() {
       )}
 
       {screen === 'history' && (
-        <HistoryScreen history={history} onBuy={() => goBuy('data')} />
+        <HistoryScreen history={history} loading={accountLoading} onBuy={() => goBuy('data')} onOpen={(row) => openOrder(row, 'history')} />
       )}
 
       {screen === 'rewards' && <RewardsScreen points={points} onRedeem={(cost) => setPoints((p) => p - cost)} />}
@@ -698,12 +1082,14 @@ function TopUp() {
           onVpn={() => setScreen('vpn')}
           featureOn={featureOn}
           onLanguage={() => setScreen('language')}
+          onHelp={() => contactSupport(null)}
+          supportChannel={hasWhatsApp() ? 'WhatsApp' : SUPPORT_EMAIL}
           onSignOut={signOut}
         />
       )}
 
       {screen === 'recipient' && (
-        <ScrollView style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
           <BackHeader onBack={() => setScreen('home')} label={t('recipient.step')} />
           <View style={{ padding: 20, gap: 20 }}>
             <Text style={st.h2}>{t('recipient.title')}</Text>
@@ -711,7 +1097,10 @@ function TopUp() {
               <Toggle2
                 opts={[{ label: t('recipient.forMyself'), val: true }, { label: t('recipient.someoneElse'), val: false }]}
                 value={forSelf}
-                onChange={(v) => { setForSelf(v); setPhone(v ? myNumber : ''); }}
+                // "For myself" is the account's own line, country and network;
+                // "someone else" starts from a blank number and keeps the
+                // country the customer last picked.
+                onChange={(v) => { if (v) selectSelf(); else { setForSelf(false); setPhone(''); } }}
               />
             </TourTarget>
             <TourTarget name="number">
@@ -721,22 +1110,30 @@ function TopUp() {
                   kept separate from the one that decides the payment rail. */}
               <PhoneInput
                 value={phone}
-                onChangeText={(v) => { setPhone(v); const d = detect(v); if (d) setCarrier(d); }}
+                onChangeText={(v) => { setPhone(v); const d = detect(v, recipientCountry); if (d) setCarrier(d); }}
                 country={recipientCountry}
                 onCountryChange={setRecipientCountry}
                 placeholder={t('auth.phonePlaceholder')}
               />
             </TourTarget>
             <TourTarget name="network">
-              <Text style={st.fieldLabel}>{t('recipient.networkLabel')}{detect(phone) ? <Text style={{ color: C.accent }}>{t('recipient.detectedSuffix')}</Text> : null}</Text>
+              <Text style={st.fieldLabel}>{t('recipient.networkLabel')}{detect(phone, recipientCountry) === carrier && carrier ? <Text style={{ color: C.accentText }}>{t('recipient.detectedSuffix')}</Text> : null}</Text>
               {/* Networks follow the recipient's country. These used to be the
                   three Ivorian carriers with Ivorian prefix hints regardless,
                   so a +226 number was offered Orange/MTN/Moov "PRÉFIXE 07".
-                  Prefix hints only exist for the home market, so they are only
-                  shown there. */}
+                  Prefix hints only exist for markets whose plan we hold. */}
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {networkOptions.map((c) => (
-                  <Pressable key={c.name} onPress={() => setCarrier(c.name)} style={[st.carrierCell, carrier === c.name && { borderColor: C.accent, backgroundColor: C.accent100 }]}>
+                  <Pressable
+                    key={c.name}
+                    onPress={() => setCarrier(c.name)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: carrier === c.name }}
+                    style={[st.carrierCell, carrier === c.name && { borderColor: C.accent, backgroundColor: C.accent100 }]}
+                  >
+                    {/* The mark does the recognising; the name stays for the
+                        screen reader and for a network whose art is missing. */}
+                    <ProviderLogo network={c.name} country={recipientCountry} size={40} style={{ marginBottom: 6 }} />
                     <Text style={{ fontFamily: F.heading, fontSize: 14, color: C.text }}>{c.name}</Text>
                     {c.prefix ? (
                       <Text style={[st.subText, { fontSize: 10 }]}>{t('recipient.prefix', { prefix: c.prefix })}</Text>
@@ -744,19 +1141,26 @@ function TopUp() {
                   </Pressable>
                 ))}
               </View>
+              {/* Says why CONTINUE is off, rather than leaving a dead button:
+                  either no network is chosen yet, or none can be served. */}
+              {networkOptions.length === 0 ? (
+                <Text style={[st.subText, { marginTop: 8, color: C.accent700 }]}>{t('recipient.noNetworks')}</Text>
+              ) : !carrierOk ? (
+                <Text style={[st.subText, { marginTop: 8 }]}>{t('recipient.pickNetwork')}</Text>
+              ) : null}
             </TourTarget>
-            <Btn label={t('common.continue')} disabled={digits.length < 8} onPress={() => setScreen('packs')} />
+            <Btn label={t('common.continue')} disabled={digits.length < 8 || !carrierOk} onPress={() => setScreen('packs')} />
           </View>
         </ScrollView>
       )}
 
       {screen === 'packs' && (
-        <ScrollView style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
           <BackHeader onBack={() => setScreen('recipient')} label={t('packs.step')} />
           <View style={{ padding: 20, gap: 16 }}>
             <View style={st.rowBetween}>
               <Text style={st.h2}>{service === 'airtime' ? t('packs.airtimeTitle') : t('packs.dataTitle')}</Text>
-              <Tag kind="neutral">{carrier}</Tag>
+              <ProviderBadge network={carrier} country={recipientCountry} />
             </View>
             <Toggle2 opts={[{ label: t('packs.airtimeToggle'), val: 'airtime' }, { label: t('packs.dataToggle'), val: 'data' }]} value={service} onChange={setService} />
             <PackGrid
@@ -769,9 +1173,11 @@ function TopUp() {
               cta={catFailed ? t('empty.retry') : null}
               onCta={catFailed ? reloadCatalogue : null}
             />
-            {service === 'airtime' && (
+            {service === 'airtime' && featureOn('customAmount') && (
               <Pressable
                 onPress={() => setScreen('amount')}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('packs.customTitle')}. ${t('packs.customSub')}`}
                 style={({ pressed }) => [st.customBox, st.rowBetween, pressed && { backgroundColor: C.accent100 }]}
               >
                 <View style={{ flex: 1 }}>
@@ -884,23 +1290,25 @@ function TopUp() {
         <AmountScreen
           carrier={carrier}
           onBack={() => setScreen('packs')}
-          onConfirm={(amt) => openPack({
-            n: fmtN(amt) + ' FCFA',
-            v: t('packs.airtimeCredit'),
-            p: amt,
-            b: amt >= 5000 ? '+10% BONUS' : amt >= 1000 ? '+5% BONUS' : null,
-          })}
+          onConfirm={(amt) => openPack(customPack(amt, t))}
         />
       )}
 
       {screen === 'pay' && (
-        <ScrollView style={{ flex: 1 }}>
-          <BackHeader onBack={() => setScreen(isVpn ? 'vpnPlans' : service === 'esim' ? 'esimPlans' : 'packs')} label={t('pay.step')} />
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+          {/* Locked while a payment is in flight: leaving mid-poll used to let a
+              success screen appear minutes later over an unrelated screen. STOP
+              WAITING below is the way out — it ends the poll, not the order. */}
+          <BackHeader
+            onBack={() => setScreen(isVpn ? 'vpnPlans' : service === 'esim' ? 'esimPlans' : 'packs')}
+            label={t('pay.step')}
+            disabled={paying}
+          />
           <View style={{ padding: 20, gap: 18 }}>
             <TourTarget name="total">
             <View style={{ borderWidth: 2, borderColor: C.text, padding: 16 }}>
               <Kicker>{t('pay.summary')}</Kicker>
-              <SummaryRow k={t('pay.to')} v={isVpn ? t('pay.vpnSubscription') : service === 'esim' ? t('pay.newEsim') : (forSelf ? t('pay.myNumber') : '') + phone} />
+              <SummaryRow k={t('pay.to')} v={isVpn ? t('pay.vpnSubscription') : service === 'esim' ? t('pay.newEsim') : (forSelf ? t('pay.myNumber') : '') + (toE164(phone, recipientCountry) ?? phone)} />
               {!isVpn && <SummaryRow k={t('pay.network')} v={carrier} />}
               <SummaryRow k={t('pay.pack')} v={pack ? pack.n : '—'} />
               {/* The fee is broken out rather than folded into the total. It is a
@@ -939,10 +1347,13 @@ function TopUp() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="email-address"
+                  textContentType="emailAddress"
+                  autoComplete="email"
+                  returnKeyType="done"
                   placeholder={t('pay.emailPlaceholder')}
                 />
                 <Text style={[st.subText, { marginTop: 6 }]}>
-                  {t('pay.emailNote', { phone })}
+                  {t('pay.emailNote', { phone: toE164(myNumber || phone, country) ?? (myNumber || phone) })}
                 </Text>
               </View>
             )}
@@ -957,10 +1368,17 @@ function TopUp() {
                   sub:
                     m.kind === 'dial'
                       ? t('pay.dialSub')
-                      : t('pay.momoSub', { phone: myNumber || phone }),
+                      : t('pay.momoSub', { phone: toE164(myNumber || phone, country) ?? (myNumber || phone) }),
                 }))
                 .map((m) => (
-                <Pressable key={m.id} onPress={() => setPay(m.id)} style={[st.payOpt, method?.id === m.id && { borderColor: C.accent, backgroundColor: C.accent100 }]}>
+                <Pressable
+                  key={m.id}
+                  onPress={() => setPay(m.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: method?.id === m.id }}
+                  accessibilityLabel={`${m.name}. ${m.sub}`}
+                  style={[st.payOpt, method?.id === m.id && { borderColor: C.accent, backgroundColor: C.accent100 }]}
+                >
                   <View style={[st.radioDot, method?.id === m.id && { backgroundColor: C.accent, borderColor: C.accent }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={st.rowTitle}>{m.name}</Text>
@@ -1002,25 +1420,19 @@ function TopUp() {
                   onPress={() => Linking.openURL('tel:' + encodeURIComponent(order.ussd)).catch(() => {})}
                 />
                 <Text style={st.subText}>{t('pay.dialWaiting')}</Text>
+                {waitingFooter}
               </View>
             )}
 
             {order?.action === 'approve_on_handset' && paying && (
               <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 8 }}>
                 <Kicker>{t('pay.authorize', { provider: method?.title ?? momoName })}</Kicker>
-                <Text style={st.subText}>{t('pay.approveOnHandset', { phone })}</Text>
+                {/* The prompt lands on the wallet being charged — the buyer's
+                    own line — never on the recipient's, which is what `phone`
+                    holds when topping up someone else. */}
+                <Text style={st.subText}>{t('pay.approveOnHandset', { phone: toE164(myNumber || phone, country) ?? (myNumber || phone) })}</Text>
                 <Text style={st.subText}>{t('pay.waitingNote', { provider: method?.title ?? momoName })}</Text>
-              </View>
-            )}
-
-            {/* A custom airtime amount is not a catalogue line, and POST /checkout
-                only takes a product id — there is no variable-amount path on the
-                API yet, so this says so instead of failing at the last step. */}
-            {!pack?.id && (
-              <View style={{ borderWidth: 2, borderColor: C.accent, padding: 12 }}>
-                <Text style={{ color: C.accent700, fontFamily: F.semi, fontSize: 13 }}>
-                  {t('pay.customUnavailable')}
-                </Text>
+                {waitingFooter}
               </View>
             )}
 
@@ -1036,37 +1448,129 @@ function TopUp() {
               label={paying
                 ? t('pay.processing')
                 : t(isMomo ? 'pay.confirm' : 'pay.payNow', { amount: quote ? formatMoney(quote.amount, quote.currency) : pack ? fmt(pack.p) : '' })}
-              disabled={paying || !pack?.id || !payment.supported || (isVpn && !emailOk)}
+              disabled={paying || !(pack?.id || pack?.custom) || !payment.supported || (isVpn && !emailOk)}
               onPress={doPay}
             />
           </View>
         </ScrollView>
       )}
 
+      {screen === 'order' && viewOrder && (() => {
+        const o = viewOrder.raw ?? {};
+        const tone = orderTone(o.status);
+        const when = (ms) => (ms ? new Date(ms).toLocaleString(i18n.language?.slice(0, 2) === 'fr' ? 'fr-FR' : 'en-GB') : '—');
+        return (
+          <ScrollView style={{ flex: 1 }}>
+            <BackHeader onBack={() => setScreen(orderFrom)} label={t('order.step')} />
+            <View style={{ padding: 20, gap: 16 }}>
+              {/* Title wraps; the status keeps its width and stays on screen. */}
+              <View style={[st.rowBetween, { alignItems: 'flex-start', gap: 12 }]}>
+                {o.network ? <ProviderLogo network={o.network} country={o.recipientCountry} size={44} style={{ marginTop: 2 }} /> : null}
+                <Text style={[st.h2, { flex: 1, flexShrink: 1 }]}>{viewOrder.desc}</Text>
+                <View style={{ flexShrink: 0, paddingTop: 8 }}>
+                  <StatusText code={o.status} label={viewOrder.status} />
+                </View>
+              </View>
+              {/* What happened, in the customer's terms — not the raw code. */}
+              {tone === 'bad' && (
+                <View style={{ borderWidth: 2, borderColor: C.accent, padding: 12 }}>
+                  <Text style={{ color: C.accent700, fontFamily: F.semi, fontSize: 13 }}>
+                    {t(`order.explain.${o.status}`, t('order.explain.generic'))}
+                    {o.failureReason ? ' ' + t(`pay.error.${o.failureReason}`, '') : ''}
+                  </Text>
+                </View>
+              )}
+              {tone === 'wait' && <Text style={st.subText}>{t('order.inFlight')}</Text>}
+              <View style={{ borderTopWidth: 2, borderColor: C.divider }}>
+                <SummaryRow k={t('pay.to')} v={o.recipientMsisdn ? '+' + String(o.recipientMsisdn).replace(/^\+/, '') : myNumber ? t('pay.myNumber') + '+' + myNumber : '—'} />
+                <SummaryRow k={t('order.amount')} v={viewOrder.amount} bold />
+                <SummaryRow k={t('order.placed')} v={when(o.createdAt)} />
+                {o.deliveredAt ? <SummaryRow k={t('order.deliveredAt')} v={when(o.deliveredAt)} /> : null}
+                <View style={[st.sumRow, { alignItems: 'center' }]}>
+                  <Text style={st.sumKey}>{t('success.ref')}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={[st.sumVal, { fontFamily: F.heading }]} selectable>{o.id ?? '—'}</Text>
+                    <Btn
+                      variant="ghost"
+                      label={copiedRef ? t('common.copied') : t('common.copy')}
+                      style={{ minHeight: 32 }}
+                      onPress={async () => {
+                        if (!o.id) return;
+                        await Clipboard.setStringAsync(o.id);
+                        setCopiedRef(true);
+                        setTimeout(() => setCopiedRef(false), 2000);
+                      }}
+                    />
+                  </View>
+                </View>
+              </View>
+              {/* Support is one tap from any order, and the primary action on
+                  one that went wrong. */}
+              <Btn
+                variant={tone === 'bad' ? 'primary' : 'secondary'}
+                label={t('order.contact')}
+                onPress={() => contactSupport(o.id)}
+              />
+              <Text style={st.subText}>{t('order.contactSub', { channel: hasWhatsApp() ? 'WhatsApp' : SUPPORT_EMAIL })}</Text>
+            </View>
+          </ScrollView>
+        );
+      })()}
+
       {screen === 'success' && (
-        <ScrollView style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
           <View style={{ backgroundColor: C.accent, padding: 20, paddingTop: 36 }}>
             <Kicker light>{t('success.kicker')}</Kicker>
             <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 56, letterSpacing: -1 }}>{t('success.title')}</Text>
           </View>
           <View style={{ padding: 20, gap: 16 }}>
+            {/* Printed from the confirmed order, not the pack: `pack.p` is the
+                list price, and the wallet statement shows price plus fee. The
+                reference is what support will ask for, so it is copyable. */}
             <View style={{ borderTopWidth: 2, borderColor: C.divider }}>
-              <SummaryRow k={t('pay.to')} v={service === 'esim' ? t('pay.newEsim') : phone} />
-              <SummaryRow k={t('pay.pack')} v={pack ? pack.n + ' · ' + carrier : '—'} />
-              <SummaryRow k={t('success.paid')} v={pack ? fmt(pack.p) : '—'} bold />
+              <SummaryRow k={t('pay.to')} v={service === 'esim' ? t('pay.newEsim') : (receipt?.to ?? (toE164(phone, recipientCountry) ?? phone))} />
+              <SummaryRow k={t('pay.pack')} v={(receipt?.pack ?? pack?.n ?? '—') + (receipt?.network ? ' · ' + receipt.network : '')} />
+              {receipt && receipt.feeXof > 0 && (
+                <SummaryRow k={t('pay.fee', { pct: receipt.feePct })} v={formatMoney(receipt.fee, receipt.currency)} />
+              )}
+              <SummaryRow
+                k={t('success.paid')}
+                v={receipt ? formatMoney(receipt.amount, receipt.currency) : pack ? fmt(pack.p) : '—'}
+                bold
+              />
+              {receipt && receipt.currency !== 'XOF' && (
+                <SummaryRow k={t('pay.converted')} v={fmt(receipt.amountXof)} />
+              )}
+              {receipt?.orderId ? (
+                <View style={[st.sumRow, { alignItems: 'center' }]}>
+                  <Text style={st.sumKey}>{t('success.ref')}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={[st.sumVal, { fontFamily: F.heading }]} selectable>{receipt.orderId}</Text>
+                    <Btn
+                      variant="ghost"
+                      label={copiedRef ? t('common.copied') : t('common.copy')}
+                      style={{ minHeight: 32 }}
+                      onPress={async () => {
+                        await Clipboard.setStringAsync(receipt.orderId);
+                        setCopiedRef(true);
+                        setTimeout(() => setCopiedRef(false), 2000);
+                      }}
+                    />
+                  </View>
+                </View>
+              ) : null}
             </View>
             <Tag>{t('success.pointsEarned', { count: earnPts })}</Tag>
             {service === 'esim' && (
-              <View style={{ borderWidth: 2, borderColor: C.text, padding: 16, gap: 12 }}>
-                <Kicker>{t('success.esimKicker')}</Kicker>
-                <Text style={st.subText}>{t('success.esimBody')}</Text>
-                <Btn
-                  label={t('success.esimCta')}
-                  onPress={() => {
-                    setEsims((e) => [{ id: Date.now(), label: pack.n, iccid: 'ICCID ···· ' + (1000 + (Date.now() % 9000)), status: 'active', dataLeft: pack.n.split('·').pop().trim(), renew: 'Valid from today' }, ...e]);
-                    setScreen('esim');
-                  }}
-                />
+              <View style={{ gap: 12 }}>
+                <View>
+                  <Kicker>{t('success.esimKicker')}</Kicker>
+                  <Text style={st.subText}>{receipt?.esim ? t('success.esimBody') : t('esim.preparing')}</Text>
+                </View>
+                {/* Straight from the provider: the ICCID it issued, the LPA code
+                    the QR encodes, the one-tap link. Nothing here is invented. */}
+                {receipt?.esim ? <EsimInstallCard esim={receipt.esim} compact /> : null}
+                <Btn variant="secondary" label={t('esim.myEsims')} onPress={() => setScreen('esim')} />
               </View>
             )}
             <Btn label={t('common.done')} onPress={() => setScreen('home')} />
@@ -1076,54 +1580,21 @@ function TopUp() {
       )}
 
       {screen === 'esim' && (
-        <ScrollView style={{ flex: 1 }}>
-          <View style={[st.backHeader, { justifyContent: 'space-between' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Btn variant="ghost" label="←" onPress={() => setScreen('profile')} />
-              <Text style={st.h2}>{t('esim.title')}</Text>
-            </View>
-            <Btn label={t('esim.newCta')} onPress={() => { setCountrySearch(''); setScreen('esimCountry'); }} style={{ minHeight: 36 }} />
-          </View>
-          <View style={{ padding: 20, gap: 12 }}>
-            {esims.length === 0 ? (
-              <EmptyState
-                art={NoEsim}
-                title={t('empty.esimTitle')}
-                body={t('empty.esimBody')}
-                cta={t('empty.esimCta')}
-                onCta={() => { setCountrySearch(''); setScreen('esimCountry'); }}
-              />
-            ) : null}
-            {esims.map((e, i) => (
-              <TourTarget key={e.id} name={i === 0 ? 'profile' : `esim-${e.id}`}>
-              <View style={{ borderWidth: 2, borderColor: C.text, padding: 14, gap: 10 }}>
-                <View style={st.rowBetween}>
-                  <Text style={{ fontFamily: F.heading, fontSize: 16, color: C.text }}>{e.label}</Text>
-                  <Tag kind={e.status === 'active' ? 'accent' : 'neutral'}>{e.status === 'active' ? t('common.active') : t('common.paused')}</Tag>
-                </View>
-                <View style={[st.rowBetween, { borderBottomWidth: 1, borderColor: C.rule, paddingBottom: 8 }]}>
-                  <Text style={st.subText}>{e.iccid}</Text>
-                  <Text style={st.subText}>{e.renew}</Text>
-                </View>
-                <View style={st.rowBetween}>
-                  <Text style={{ fontFamily: F.body, fontSize: 13, color: C.text }}>
-                    <Text style={{ fontFamily: F.semi }}>{e.dataLeft}</Text> <Text style={{ color: C.muted }}>{t('esim.dataLeft')}</Text>
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 4 }}>
-                    <Btn variant="ghost" label={t('esim.topUp')} onPress={() => { setService('data'); setForSelf(true); setScreen('packs'); }} />
-                    <Btn variant="secondary" label={e.status === 'active' ? t('esim.pause') : t('esim.activate')} onPress={() => setEsims((list) => list.map((x) => (x.id === e.id ? { ...x, status: x.status === 'active' ? 'paused' : 'active' } : x)))} />
-                  </View>
-                </View>
-              </View>
-              </TourTarget>
-            ))}
-            <Text style={st.subText}>{t('esim.note')}</Text>
-          </View>
-        </ScrollView>
+        <EsimListScreen
+          esims={esims}
+          onBack={() => setScreen('profile')}
+          onNew={() => { setTopUpIccid(null); setCountrySearch(''); setScreen('esimCountry'); }}
+          onOpen={(e) => { setViewEsim(e); setScreen('esimDetail'); }}
+          onTopUp={topUpEsim}
+        />
+      )}
+
+      {screen === 'esimDetail' && (
+        <EsimDetailScreen esim={viewEsim} onBack={() => setScreen('esim')} onTopUp={topUpEsim} />
       )}
 
       {screen === 'esimCountry' && (
-        <ScrollView style={{ flex: 1 }}>
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
           <BackHeader onBack={() => setScreen('esim')} label={t('esim.destinationStep')} />
           <View style={{ padding: 20 }}>
             <Text style={st.h2}>{t('esim.destinationTitle')}</Text>
@@ -1154,6 +1625,7 @@ function TopUp() {
                 <Pressable
                   key={c.code}
                   onPress={async () => {
+                    setTopUpIccid(null);
                     setEsimCountry(c.name);
                     setEsimPlanList([]);
                     setScreen('esimPlans');
@@ -1162,6 +1634,8 @@ function TopUp() {
                     const res = await fetchEsimPlans(c.name, i18n.language?.slice(0, 2) || 'en').catch(() => null);
                     if (res) setEsimPlanList(res.plans.map(toPack));
                   }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${c.name}. ${c.sub}`}
                   style={({ pressed }) => [st.packRow, pressed && { backgroundColor: C.accent100 }]}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
@@ -1185,11 +1659,11 @@ function TopUp() {
       )}
 
       {screen === 'esimPlans' && (
-        <ScrollView style={{ flex: 1 }}>
-          <BackHeader onBack={() => setScreen('esimCountry')} label={t('esim.plansStep')} />
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+          <BackHeader onBack={() => setScreen(topUpIccid ? 'esim' : 'esimCountry')} label={t('esim.plansStep')} />
           <View style={{ padding: 20 }}>
             <View style={st.rowBetween}>
-              <Text style={st.h2}>{t('esim.plansTitle')}</Text>
+              <Text style={st.h2}>{topUpIccid ? t('esim.topUpTitle') : t('esim.plansTitle')}</Text>
               <Tag kind="neutral">{esimCountry}</Tag>
             </View>
             <Text style={[st.subText, { marginBottom: 16 }]}>{t('esim.plansSub')}</Text>
@@ -1204,6 +1678,7 @@ function TopUp() {
         </ScrollView>
       )}
 
+      </KeyboardAvoidingView>
       {showNav && <TabBar items={navItems(t)} value={screen} onChange={setScreen} insetBottom={insets.bottom} />}
 
       {/* Copy is looked up per tour and step, so adding a step is a target name

@@ -14,7 +14,7 @@ export default function VpnRecoverScreen({ signedOut, onBack, onOpenConfigs }) {
   const [sent, setSent] = useState(false);
 
   return (
-    <ScrollView style={{ flex: 1 }}>
+    <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
       <BackHeader onBack={onBack} label={t('vpn.recoverStep')} />
 
       <View style={{ padding: 20, gap: 18 }}>
@@ -40,6 +40,9 @@ export default function VpnRecoverScreen({ signedOut, onBack, onOpenConfigs }) {
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
+                textContentType="emailAddress"
+                autoComplete="email"
+                returnKeyType="done"
                 placeholder={t('vpn.emailPlaceholder')}
               />
             </View>
@@ -60,7 +63,7 @@ export default function VpnRecoverScreen({ signedOut, onBack, onOpenConfigs }) {
             <View style={{ backgroundColor: C.accent, padding: 20 }}>
               <Kicker light>{t('vpn.checkInbox')}</Kicker>
               <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 34, letterSpacing: -0.8 }}>{t('vpn.linkSent')}</Text>
-              <Text style={{ color: 'rgba(243,242,242,0.85)', fontSize: 13, fontFamily: F.body, marginTop: 6 }}>
+              <Text style={{ color: C.bg, fontSize: 13, fontFamily: F.body, marginTop: 6 }}>
                 {t('vpn.linkSentBody', { email: email.trim() })}
               </Text>
             </View>

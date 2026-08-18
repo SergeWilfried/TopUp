@@ -14,7 +14,8 @@
     "worker:build": "pnpm --filter @topup/worker build",
     "worker:deploy": "pnpm --filter @topup/worker run deploy",
     "typecheck": "pnpm -r --if-present typecheck",
-    "admin:deploy": "pnpm --filter @topup/admin run deploy"
+    "admin:deploy": "pnpm --filter @topup/admin run deploy",
+    "prepare": "husky"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -26,5 +27,8 @@
       "react": "19.1.0",
       "react-dom": "19.1.0"
     }
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }

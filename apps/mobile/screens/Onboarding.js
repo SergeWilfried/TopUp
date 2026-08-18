@@ -26,7 +26,7 @@ export default function Onboarding({ onDone }) {
     <View style={{ flex: 1 }}>
       <View style={[st.header, st.rowBetween, { borderBottomWidth: 2, borderColor: C.divider }]}>
         <Brand />
-        <Btn variant="ghost" label={t('common.skip')} onPress={onDone} style={{ minHeight: 32 }} />
+        <Btn variant="ghost" label={t('common.skip')} onPress={onDone} hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }} style={{ minHeight: 44 }} />
       </View>
 
       <Animated.ScrollView
@@ -75,7 +75,7 @@ export default function Onboarding({ onDone }) {
       <View style={{ padding: 20, paddingTop: 0, gap: 14 }}>
         <View style={{ flexDirection: 'row', gap: PAGER_GAP }} onLayout={(e) => setBarW(e.nativeEvent.layout.width)}>
           {ONBOARDING.map((s, n) => (
-            <Pressable key={s.key} onPress={() => goTo(n)} hitSlop={12} style={{ flex: 1 }}>
+            <Pressable key={s.key} onPress={() => goTo(n)} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('onboarding.goToSlide', { n: n + 1 })} style={{ flex: 1 }}>
               <View style={{ height: 4, backgroundColor: C.rule }} />
             </Pressable>
           ))}

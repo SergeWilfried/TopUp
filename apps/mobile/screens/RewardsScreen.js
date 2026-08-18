@@ -13,7 +13,7 @@ export default function RewardsScreen({ points, onRedeem }) {
       <View style={{ backgroundColor: C.accent, padding: 20 }}>
         <Kicker light>{t('rewards.balance')}</Kicker>
         <Text style={{ color: C.bg, fontFamily: F.heading, fontSize: 52 }}>{fmtN(points)}</Text>
-        <Text style={{ color: 'rgba(243,242,242,0.85)', fontSize: 12, fontFamily: F.body }}>
+        <Text style={{ color: C.bg, fontSize: 12, fontFamily: F.body }}>
           {t('rewards.rule')}
         </Text>
       </View>

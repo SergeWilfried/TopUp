@@ -81,5 +81,12 @@ export default {
         .then(({ syncDataBundles }) => syncDataBundles(env, 'BF', 'Burkina Faso'))
         .catch((e) => console.error(`bundle sync failed: ${(e as Error).message}`)),
     );
+    // eSIM plans reprice in EUR at the provider's discretion; refreshed on the
+    // same cadence so the shop never quotes a plan Yesim no longer sells.
+    ctx.waitUntil(
+      import('./delivery/esim-plans')
+        .then(({ syncEsimPlans }) => syncEsimPlans(env))
+        .catch((e) => console.error(`esim sync failed: ${(e as Error).message}`)),
+    );
   },
 };
