@@ -6,8 +6,6 @@ import {
   airtimePacks,
   dataPacks,
   vpnPlans,
-  esimCountries,
-  esimPlansFor,
   en,
 } from '@topup/core';
 
@@ -98,7 +96,6 @@ export const customers: Customer[] = Array.from({ length: 24 }, (_, i): Customer
 const airtime = airtimePacks(t);
 const data = dataPacks(t);
 const plans = vpnPlans(t);
-const countriesSeed = esimCountries(t);
 
 // Orders are drawn from the catalogue itself, so each one records the product
 // it sold. Without a `sku` the console could only guess at units sold by

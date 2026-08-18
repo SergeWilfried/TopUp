@@ -131,7 +131,10 @@ export function EsimInstallCard({ esim, compact = false }) {
   );
 }
 
-export function EsimListScreen({ esims, onBack, onNew, onOpen, onTopUp }) {
+/** Whether this profile's destination is still one we sell plans for. */
+const canTopUp = (e, destinations) => (destinations ?? []).some((d) => d.code === e.country);
+
+export function EsimListScreen({ esims, destinations, onBack, onNew, onOpen, onTopUp }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.slice(0, 2);
   return (
@@ -177,7 +180,7 @@ export function EsimListScreen({ esims, onBack, onNew, onOpen, onTopUp }) {
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 4 }}>
-                <Btn variant="ghost" label={t('esim.topUp')} onPress={() => onTopUp(e)} />
+                {canTopUp(e, destinations) ? <Btn variant="ghost" label={t('esim.topUp')} onPress={() => onTopUp(e)} /> : null}
                 <Btn variant="secondary" label={state === 'notInstalled' ? t('esim.install') : t('esim.showQr')} onPress={() => onOpen(e)} />
               </View>
             </Pressable>
@@ -189,7 +192,7 @@ export function EsimListScreen({ esims, onBack, onNew, onOpen, onTopUp }) {
   );
 }
 
-export function EsimDetailScreen({ esim, onBack, onTopUp }) {
+export function EsimDetailScreen({ esim, destinations, onBack, onTopUp }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.slice(0, 2);
   if (!esim) return null;
@@ -216,7 +219,9 @@ export function EsimDetailScreen({ esim, onBack, onTopUp }) {
 
         <EsimInstallCard esim={esim} />
 
-        <Btn variant="secondary" label={t('esim.topUpCta')} onPress={() => onTopUp(esim)} />
+        {canTopUp(esim, destinations) ? (
+          <Btn variant="secondary" label={t('esim.topUpCta')} onPress={() => onTopUp(esim)} />
+        ) : null}
       </View>
     </ScrollView>
   );

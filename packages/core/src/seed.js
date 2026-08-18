@@ -5,7 +5,7 @@
 // params and resolved per request. Anything that is a unit ("150 MB", "1 GB",
 // "500 FCFA") or a proper noun is stored literally — translating those would be
 // wrong, not merely unnecessary.
-import { CARRIERS, ESIM_DESTINATIONS, esimPlanSeed, fmtN } from './data';
+import { CARRIERS, ESIM_DESTINATIONS, fmtN } from './data';
 
 const HOME = 'Côte d’Ivoire';
 
@@ -26,10 +26,6 @@ const VPN = [
   { nameKey: 'vpn.plan90', name: '90 days', termsKey: 'vpn.planDevices5', price: 15000, days: 90 },
   { nameKey: 'vpn.plan365', name: '1 year', termsKey: 'vpn.planDevices5', price: 45000, days: 365, bonusKey: 'vpn.bestValue' },
 ];
-
-// eSIM plans expand per operator; the tiers live with the destinations so the
-// seeded catalogue and the app's local fallback cannot disagree.
-const esimFor = esimPlanSeed;
 
 export const destinationSeed = () =>
   ESIM_DESTINATIONS.map((d, i) => ({
@@ -77,22 +73,11 @@ export const catalogueSeed = () => {
     }
   }
 
-  for (const dest of ESIM_DESTINATIONS) {
-    for (const plan of esimFor(dest)) {
-      push({
-        id: `esim-${dest.code}-${plan.name}`.toLowerCase().replace(/[\s·]+/g, '-'),
-        type: 'esim',
-        name: plan.name,
-        termsKey: plan.termsKey,
-        termsParams: plan.termsParams ?? null,
-        bonus: plan.bonus ?? null,
-        bonusKey: plan.bonusKey ?? null,
-        price: plan.price,
-        country: dest.name,
-        network: plan.network,
-      });
-    }
-  }
+  // eSIM plans are deliberately not seeded. They are the provider's plans,
+  // pulled in by the sync with the provider plan id in `bundle_id`; a seeded
+  // row has no such id and cannot be provisioned, so it would be a product in
+  // the shop that fails after payment. The destinations are seeded; the plans
+  // arrive with the first sync.
 
   for (const plan of VPN) {
     push({

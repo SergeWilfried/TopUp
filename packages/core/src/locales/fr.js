@@ -385,6 +385,8 @@ export default {
     activated: 'Activée le',
     topUpCta: 'RECHARGER CETTE ESIM →',
     topUpTitle: 'Recharger',
+    topUpUnavailableTitle: 'Recharge indisponible',
+    topUpUnavailableBody: 'Nous ne vendons plus de forfaits pour cette destination. L’eSIM continue de fonctionner jusqu’à la fin de son forfait.',
     state: { notInstalled: 'NON INSTALLÉE', installed: 'INSTALLÉE', removed: 'SUPPRIMÉE', expired: 'EXPIRÉE' },
     destinationStep: '01 — DESTINATION',
     destinationTitle: 'Où avez-vous besoin d’internet ?',
@@ -393,11 +395,7 @@ export default {
     plansStep: '02 — CHOISIR UN FORFAIT ESIM',
     plansTitle: 'Nouvelle eSIM',
     plansSub: 'Livrée aussitôt — installation par QR code, sans passer en boutique.',
-    home: 'Local · Orange, MTN, Moov',
     travel: 'Voyage',
-    localValid30: 'Local · Valable 30 jours',
-    travelValid: 'Voyage · Valable {{days}} jours',
-    popular: 'POPULAIRE',
   },
 
   vpn: {

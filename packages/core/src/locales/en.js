@@ -385,6 +385,8 @@ export default {
     activated: 'Activated',
     topUpCta: 'TOP UP THIS ESIM →',
     topUpTitle: 'Top up',
+    topUpUnavailableTitle: 'Cannot top up here',
+    topUpUnavailableBody: 'We no longer sell plans for this destination. The eSIM keeps working until its plan runs out.',
     state: { notInstalled: 'NOT INSTALLED', installed: 'INSTALLED', removed: 'REMOVED', expired: 'EXPIRED' },
     destinationStep: '01 — DESTINATION',
     destinationTitle: 'Where do you need data?',
@@ -393,11 +395,7 @@ export default {
     plansStep: '02 — CHOOSE AN ESIM PLAN',
     plansTitle: 'New eSIM',
     plansSub: 'Delivered instantly — install with a QR code, no store visit.',
-    home: 'Home · Orange, MTN, Moov',
     travel: 'Travel',
-    localValid30: 'Local · Valid 30 days',
-    travelValid: 'Travel · Valid {{days}} days',
-    popular: 'POPULAR',
   },
 
   vpn: {

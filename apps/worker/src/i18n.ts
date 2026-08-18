@@ -14,7 +14,15 @@ export const translator = (lang: string) => {
       if (acc && typeof acc === 'object' && part in acc) return (acc as Record<string, unknown>)[part];
       return undefined;
     }, table);
-    if (typeof value !== 'string') return key;
+    // A key that does not resolve degrades to nothing, never to itself.
+    // These strings are product prose — a name, a validity line, a coverage
+    // note — and every screen already renders them empty when absent, whereas
+    // a literal "esim.travelValid" in an order history is a visible fault. The
+    // warning is what makes the miss findable; the customer never sees it.
+    if (typeof value !== 'string') {
+      console.warn(`i18n: unresolved key ${key} (${lang})`);
+      return '';
+    }
     return vars
       ? value.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(vars[name] ?? ''))
       : value;

@@ -189,6 +189,10 @@ function TopUp() {
   const [features, setFeatures] = useState(null);
   const [locations, setLocations] = useState([]); // /servers
   const [esimPlanList, setEsimPlanList] = useState([]);
+  // In flight, rather than inferred from an empty list: a destination that
+  // genuinely has no plans is not the same as one still loading, and inferring
+  // it left an empty list spinning for ever.
+  const [esimPlansLoading, setEsimPlansLoading] = useState(false);
   const [payError, setPayError] = useState(null);
   const [order, setOrder] = useState(null); // in-flight purchase
   /**
@@ -851,14 +855,26 @@ function TopUp() {
    */
   const topUpEsim = async (e) => {
     const dest = (cat?.esimDestinations ?? []).find((d) => d.code === e.country) ?? null;
+    // A destination we have stopped selling has no plans to show. Say so here
+    // rather than opening a plan list that can only ever be empty — the eSIM
+    // itself keeps working, it just cannot be topped up through us.
+    if (!dest) {
+      Alert.alert(t('esim.topUpUnavailableTitle'), t('esim.topUpUnavailableBody'));
+      return;
+    }
     setTopUpIccid(e.iccid);
-    setEsimCountry(dest?.name ?? e.country ?? '');
+    setEsimCountry(dest.name);
     setEsimPlanList([]);
     setScreen('esimPlans');
-    if (dest) {
-      const res = await fetchEsimPlans(dest.name, i18n.language?.slice(0, 2) || 'en').catch(() => null);
-      if (res) setEsimPlanList(res.plans.map(toPack));
-    }
+    await loadEsimPlans(dest.name);
+  };
+
+  /** Plans for one destination, with an honest in-flight flag. */
+  const loadEsimPlans = async (name) => {
+    setEsimPlansLoading(true);
+    const res = await fetchEsimPlans(name, i18n.language?.slice(0, 2) || 'en').catch(() => null);
+    setEsimPlanList(res ? res.plans.map(toPack) : []);
+    setEsimPlansLoading(false);
   };
   /**
    * Reaches support with the order reference already in the message — the
@@ -1582,6 +1598,7 @@ function TopUp() {
       {screen === 'esim' && (
         <EsimListScreen
           esims={esims}
+          destinations={cat?.esimDestinations ?? []}
           onBack={() => setScreen('profile')}
           onNew={() => { setTopUpIccid(null); setCountrySearch(''); setScreen('esimCountry'); }}
           onOpen={(e) => { setViewEsim(e); setScreen('esimDetail'); }}
@@ -1590,7 +1607,7 @@ function TopUp() {
       )}
 
       {screen === 'esimDetail' && (
-        <EsimDetailScreen esim={viewEsim} onBack={() => setScreen('esim')} onTopUp={topUpEsim} />
+        <EsimDetailScreen esim={viewEsim} destinations={cat?.esimDestinations ?? []} onBack={() => setScreen('esim')} onTopUp={topUpEsim} />
       )}
 
       {screen === 'esimCountry' && (
@@ -1631,8 +1648,7 @@ function TopUp() {
                     setScreen('esimPlans');
                     // Plans are per-destination, so they are fetched on demand
                     // rather than shipped inside the catalogue payload.
-                    const res = await fetchEsimPlans(c.name, i18n.language?.slice(0, 2) || 'en').catch(() => null);
-                    if (res) setEsimPlanList(res.plans.map(toPack));
+                    await loadEsimPlans(c.name);
                   }}
                   accessibilityRole="button"
                   accessibilityLabel={`${c.name}. ${c.sub}`}
@@ -1670,7 +1686,7 @@ function TopUp() {
             <PackGrid
               items={esimPlanList}
               onSelect={(p) => { setService('esim'); setCarrier(p.carrier); openPack(p); }}
-              loading={esimPlanList.length === 0 && cat !== null}
+              loading={esimPlansLoading}
               title={t('empty.packsTitle')}
               body={t('empty.packsBody')}
             />
