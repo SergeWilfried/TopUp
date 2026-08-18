@@ -1,12 +1,27 @@
 import { useEffect, useState } from 'react';
 import { fmt, fmtN } from '@topup/core';
+import { ORDER_STATUS_LABEL } from '../api';
 import { providerLabel, type OrderPage, type Stats , formatMsisdn } from '../api';
 import { useApi } from '../useApi';
 import { KpiStrip, OrderTag, PageHead, Pager, SecHead, Seg } from '../components/Bits';
 import { TableState } from '../states';
 import OrderDetail from './OrderDetail';
 
-const STATUSES = ['all', 'delivered', 'pending', 'failed', 'refunded'] as const;
+/**
+ * Ordered by what an operator opens this screen to do. The two states that
+ * need a person come first: `delivery_failed` owes a refund, and
+ * `delivery_unknown` is the one the reconciler deliberately will not touch.
+ */
+const STATUSES = [
+  'all',
+  'delivery_unknown',
+  'delivery_failed',
+  'pending',
+  'delivering',
+  'delivered',
+  'failed',
+  'refunded',
+] as const;
 const PRODUCTS = ['all', 'airtime', 'data', 'esim', 'vpn'] as const;
 
 const time = (ms: number) =>
@@ -61,7 +76,12 @@ export default function Orders() {
           right={
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <Seg options={PRODUCTS} value={product} onChange={setProduct} />
-              <Seg options={STATUSES} value={status} onChange={setStatus} />
+              <Seg
+                options={STATUSES}
+                value={status}
+                onChange={setStatus}
+                label={(v) => (v === 'all' ? 'all' : ORDER_STATUS_LABEL[v].toLowerCase())}
+              />
             </div>
           }
         />

@@ -398,6 +398,97 @@ admin.post('/bundles/sync', async (c) => {
   return c.json(await syncDataBundles(c.env, country, name));
 });
 
+// ── team & security ─────────────────────────────────────────────────────────
+
+/** Who has console access, and whether they have ever managed to use it. */
+admin.get('/team', async (c) => {
+  const { listStaff } = await import('./staff');
+  return c.json(await listStaff(c.env, c.get('staff').id));
+});
+
+/**
+ * Grants access to an email address, creating the account if it is new.
+ *
+ * The invitee then signs in through the ordinary OTP flow and is already
+ * staff. Creating the row up front is the whole point: the alternative asks
+ * them to sign in first so you can promote them afterwards, which is
+ * impossible to bootstrap and is why the first staff account here had to be
+ * written by hand against production.
+ */
+admin.post('/team', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { email?: unknown };
+  const { grantStaff } = await import('./staff');
+  const result = await grantStaff(c.env, body.email);
+  if (!result.ok) return c.json({ error: result.error, field: 'email' }, result.status as 400);
+
+  const staff = c.get('staff');
+  console.log(`[audit] staff granted to ${String(body.email)} by ${staff?.email ?? staff?.id}`);
+  return c.json(result.data, 201);
+});
+
+/** Removes access and ends that account's sessions. Cannot lock you out. */
+admin.delete('/team/:id', async (c) => {
+  const { revokeStaff } = await import('./staff');
+  const staff = c.get('staff');
+  const result = await revokeStaff(c.env, c.req.param('id'), staff.id);
+  if (!result.ok) return c.json({ error: result.error }, result.status as 404);
+
+  console.log(`[audit] staff revoked from ${c.req.param('id')} by ${staff?.email ?? staff?.id}`);
+  return c.json(result.data);
+});
+
+/** Signs one account out everywhere without changing what it may do. */
+admin.post('/team/:id/signout', async (c) => {
+  const { revokeSessions } = await import('./staff');
+  const staff = c.get('staff');
+  const result = await revokeSessions(c.env, c.req.param('id'));
+  console.log(`[audit] sessions revoked for ${c.req.param('id')} by ${staff?.email ?? staff?.id}`);
+  return c.json(result);
+});
+
+/**
+ * Whether the front door works. Booleans only — never a secret's value.
+ *
+ * Production had no OTP channel configured at all, so the one staff account
+ * that existed could not sign in, and nothing in the console said why.
+ */
+admin.get('/security', async (c) => {
+  const { securityState } = await import('./staff');
+  return c.json(await securityState(c.env));
+});
+
+/**
+ * The FX rate book.
+ *
+ * Lists every currency the payment router can land on, not merely the ones a
+ * row exists for: a missing rate is the interesting case, and an absent row
+ * shows nothing. While a rate is missing, that market's checkout returns
+ * `no_fx_rate` and the customer simply cannot pay.
+ */
+admin.get('/rates', async (c) => {
+  const { listRates } = await import('./checkout/rates');
+  return c.json(await listRates(c.env));
+});
+
+/**
+ * Sets one rate, quoted as an operator says it: "1 USD = 610 FCFA".
+ *
+ * One at a time and typed by a person on purpose. There is no bulk seed here
+ * because filling the table with indicative numbers would convert an honest
+ * refusal into a quietly wrong price, and a wrong rate loses money on every
+ * sale without anyone noticing.
+ */
+admin.put('/rates/:currency', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { xofPerUnit?: unknown };
+  const { setRate } = await import('./checkout/rates');
+  const result = await setRate(c.env, c.req.param('currency'), body.xofPerUnit);
+  if (!result.ok) return c.json({ error: result.error, field: 'xofPerUnit' }, result.status as 400);
+
+  const staff = c.get('staff');
+  console.log(`[audit] fx rate ${result.row.currency} set by ${staff?.email ?? staff?.id ?? '?'}`);
+  return c.json(result.row);
+});
+
 /**
  * Prepaid balance on every delivery rail, in one call.
  *

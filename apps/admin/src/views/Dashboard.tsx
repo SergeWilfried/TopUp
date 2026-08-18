@@ -1,6 +1,6 @@
 import { fmt, fmtN } from '@topup/core';
 import { formatMsisdn } from '../api';
-import type { OrderPage, RailBalance, Stats } from '../api';
+import type { OrderPage, RateBook, RailBalance, Stats } from '../api';
 import { useApi } from '../useApi';
 import { KpiStrip, OrderTag, PageHead, Panel, SecHead } from '../components/Bits';
 import { Loaded, TableState } from '../states';
@@ -12,6 +12,7 @@ export default function Dashboard() {
   const stats = useApi<Stats>('/admin/stats');
   const recent = useApi<OrderPage>('/admin/orders', { perPage: 10, sort: 'date', order: 'desc' });
   const float = useApi<{ rails: RailBalance[] }>('/admin/balances');
+  const rates = useApi<RateBook>('/admin/rates');
 
   const s = stats.data;
   const peak = Math.max(...(s?.revenueSeries ?? [0]), 1);
@@ -162,6 +163,37 @@ export default function Dashboard() {
           <Panel title="Needs attention">
             <Loaded loading={stats.loading} error={stats.error} onRetry={stats.reload}>
               <div className="rows" style={{ marginTop: 12 }}>
+                {/* The two rows that owe someone something, first. Both are
+                    states the delivery machine hands to a person on purpose:
+                    one owes a refund, the other cannot be retried without
+                    risking paying for the same top-up twice. */}
+                <div className="row">
+                  <span className="k">Needs checking</span>
+                  <span className={`figure num${(s?.deliveryUnknown ?? 0) > 0 ? ' bad' : ''}`}>
+                    {s?.deliveryUnknown ?? 0}
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="k">Refund due</span>
+                  <span className={`figure num${(s?.deliveryFailed ?? 0) > 0 ? ' bad' : ''}`}>
+                    {s?.deliveryFailed ?? 0}
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="k">Stalled &gt; 1 hour</span>
+                  <span className={`figure num${(s?.stalled ?? 0) > 0 ? ' bad' : ''}`}>{s?.stalled ?? 0}</span>
+                </div>
+                {/* The rate book lives under Settings now, but its alarm
+                    cannot: an unpriced market is a checkout returning 503 to
+                    real customers, and the reason it went unnoticed for so
+                    long is that nothing on a screen anyone opens ever
+                    mentioned it. */}
+                <div className="row">
+                  <span className="k">Markets with no rate</span>
+                  <span className={`figure num${(rates.data?.missing ?? 0) > 0 ? ' bad' : ''}`}>
+                    {rates.data?.missing ?? 0}
+                  </span>
+                </div>
                 <div className="row">
                   <span className="k">VPN expiring ≤ 7 days</span>
                   <span className="figure num">{s?.expiringVpn ?? 0}</span>

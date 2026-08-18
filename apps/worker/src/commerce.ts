@@ -341,17 +341,34 @@ export async function commerceStats(env: Env) {
             SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
             SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) AS refunded,
+            -- The work queue. A delivery_failed is money taken and nothing
+            -- given, so a refund is owed; a delivery_unknown is deliberately
+            -- never auto-retried, because retrying a top-up we may already
+            -- have sent pays for it twice. Both wait for a person, so both
+            -- have to be countable by one.
+            SUM(CASE WHEN status = 'delivery_failed' THEN 1 ELSE 0 END) AS deliveryFailed,
+            SUM(CASE WHEN status = 'delivery_unknown' THEN 1 ELSE 0 END) AS deliveryUnknown,
+            -- Paid but not yet resolved either way, and old enough that it is
+            -- no longer just in flight.
+            SUM(CASE WHEN status IN ('paid','delivering') AND created_at < ? THEN 1 ELSE 0 END) AS stalled,
             SUM(CASE WHEN status IN ('failed','refunded','delivery_failed') THEN 1 ELSE 0 END) AS unhappy
      FROM orders`,
-  ).first<{
-    orders: number;
-    revenue: number;
-    fees: number;
-    delivered: number;
-    pending: number;
-    refunded: number;
-    unhappy: number;
-  }>();
+  )
+    // An hour: mobile-money approval is slow, but not that slow, and anything
+    // still moving after one is stuck rather than pending.
+    .bind(t - 3_600_000)
+    .first<{
+      orders: number;
+      revenue: number;
+      fees: number;
+      delivered: number;
+      pending: number;
+      refunded: number;
+      deliveryFailed: number;
+      deliveryUnknown: number;
+      stalled: number;
+      unhappy: number;
+    }>();
 
   const rev7 = await revenueIn(t - 7 * DAY, t + DAY);
   const revPrev7 = await revenueIn(t - 14 * DAY, t - 7 * DAY);
@@ -396,6 +413,9 @@ export async function commerceStats(env: Env) {
     orders7,
     pending: totals?.pending ?? 0,
     refunded: totals?.refunded ?? 0,
+    deliveryFailed: totals?.deliveryFailed ?? 0,
+    deliveryUnknown: totals?.deliveryUnknown ?? 0,
+    stalled: totals?.stalled ?? 0,
     customers,
     avgOrder: totals?.delivered ? Math.round((totals.revenue ?? 0) / totals.delivered) : 0,
     failureRate: totals?.orders

@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-8d236632-8a73-4689-8de0-2d08c3311da6/styles.css">
+<script src="_ds/modernist-8d236632-8a73-4689-8de0-2d08c3311da6/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--color-bg);color:var(--color-text)}
+a{color:var(--color-accent)}a:hover{color:var(--color-accent-700)}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;font-family:var(--font-body)">
+  <div class="nav" style="display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:2px solid var(--color-divider)">
+    <div style="display:flex;align-items:center;gap:32px">
+      <div class="nav-brand" style="font-family:var(--font-heading);font-weight:800;font-size:20px;letter-spacing:-.01em">TOPUP<span style="color:var(--color-accent)">.</span> <span style="font-weight:400;font-size:13px;color:var(--color-neutral-700)">Admin</span></div>
+      <div style="display:flex;gap:20px">
+        <sc-for list="{{navLinks}}" as="n" hint-placeholder-count="4">
+          <a onClick="{{n.onClick}}" style="{{n.style}}">{{n.label}}</a>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="tag tag-neutral">LIVE · ABIDJAN</span>
+      <div style="width:32px;height:32px;border:1.5px solid var(--color-text);display:grid;place-items:center;font-family:var(--font-heading);font-weight:800;font-size:12px">SA</div>
+    </div>
+  </div>
+
+  <sc-if value="{{wizOpen}}" hint-placeholder-val="{{ false }}">
+  <div class="dialog-backdrop" style="position:fixed;inset:0;background:rgba(32,30,29,.5);display:grid;place-items:center;z-index:50" onClick="{{wizCancel}}">
+    <div class="dialog" onClick="{{stopProp}}" style="background:var(--color-bg);border:2px solid var(--color-text);width:520px;max-width:92vw;box-shadow:var(--shadow-lg)">
+      <div style="padding:20px 24px;border-bottom:2px solid var(--color-divider);display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600">New product · step {{wizStepNum}} of 3</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:800;margin-top:4px">{{wizTitle}}</div>
+        </div>
+        <button class="btn btn-ghost" onClick="{{wizCancel}}" style="font-size:14px">×</button>
+      </div>
+      <div style="display:flex;border-bottom:2px solid var(--color-divider)">
+        <sc-for list="{{wizSteps}}" as="w" hint-placeholder-count="3">
+          <div style="{{w.style}}">{{w.label}}</div>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{wizIsType}}" hint-placeholder-val="{{ true }}">
+        <div style="padding:24px;display:grid;grid-template-columns:1fr 1fr;border-bottom:2px solid var(--color-divider);gap:0">
+          <sc-for list="{{wizTypeCells}}" as="t" hint-placeholder-count="4">
+            <div onClick="{{t.onClick}}" style="{{t.style}}">
+              <div style="font-family:var(--font-heading);font-weight:800;font-size:16px">{{t.name}}</div>
+              <div style="font-size:12px;color:var(--color-neutral-700);margin-top:4px">{{t.sub}}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{wizIsDetails}}" hint-placeholder-val="{{ false }}">
+        <div style="padding:24px;display:flex;flex-direction:column;gap:16px;border-bottom:2px solid var(--color-divider)">
+          <div class="field">
+            <label style="display:block;font-size:12px;color:var(--color-neutral-700);margin-bottom:6px">Product name</label>
+            <input class="input" value="{{wizName}}" onChange="{{onWizName}}" placeholder="{{wizNamePh}}" style="width:100%;box-sizing:border-box;padding:10px 14px;font-size:14px;border:1.5px solid var(--color-divider)">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="field">
+              <label style="display:block;font-size:12px;color:var(--color-neutral-700);margin-bottom:6px">Price (FCFA)</label>
+              <input class="input" value="{{wizPrice}}" onChange="{{onWizPrice}}" placeholder="e.g. 1 500" inputMode="numeric" style="width:100%;box-sizing:border-box;padding:10px 14px;font-size:14px;border:1.5px solid var(--color-divider)">
+            </div>
+            <div class="field">
+              <label style="display:block;font-size:12px;color:var(--color-neutral-700);margin-bottom:6px">Validity</label>
+              <input class="input" value="{{wizValidity}}" onChange="{{onWizValidity}}" placeholder="e.g. 30 days" style="width:100%;box-sizing:border-box;padding:10px 14px;font-size:14px;border:1.5px solid var(--color-divider)">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;color:var(--color-neutral-700);margin-bottom:6px">Network</label>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
+              <sc-for list="{{wizNetCells}}" as="n" hint-placeholder-count="5">
+                <div onClick="{{n.onClick}}" style="{{n.style}}">{{n.name}}</div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="field">
+            <label style="display:block;font-size:12px;color:var(--color-neutral-700);margin-bottom:6px">Bonus tag <span style="color:var(--color-neutral-500)">(optional)</span></label>
+            <input class="input" value="{{wizBonus}}" onChange="{{onWizBonus}}" placeholder="e.g. +500 MB or +5% BONUS" style="width:100%;box-sizing:border-box;padding:10px 14px;font-size:14px;border:1.5px solid var(--color-divider)">
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{wizIsReview}}" hint-placeholder-val="{{ false }}">
+        <div style="padding:24px;border-bottom:2px solid var(--color-divider)">
+          <div style="border:2px solid var(--color-text);padding:18px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+              <div style="font-family:var(--font-heading);font-size:20px;font-weight:800">{{wizName}}</div>
+              <sc-if value="{{wizBonusSet}}" hint-placeholder-val="{{ false }}"><span class="tag tag-accent" style="font-size:10px">{{wizBonus}}</span></sc-if>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--color-neutral-300);margin-top:12px"><span style="color:var(--color-neutral-700)">Type</span><span style="font-weight:600">{{wizType}}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Network</span><span style="font-weight:600">{{wizNet}}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Validity</span><span style="font-weight:600">{{wizValidityShown}}</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:15px;padding:10px 0 2px"><span style="font-family:var(--font-heading);font-weight:800">Price</span><span style="font-family:var(--font-heading);font-weight:800">{{wizPriceFmt}}</span></div>
+          </div>
+          <div style="font-size:12px;color:var(--color-neutral-700);margin-top:12px">The product is created disabled — enable it from the catalog when ready.</div>
+        </div>
+      </sc-if>
+
+      <div class="dialog-actions" style="padding:16px 24px;display:flex;justify-content:space-between;gap:8px">
+        <button class="btn btn-ghost" onClick="{{wizBack}}" style="font-size:12px;visibility:{{wizBackVis}}">← BACK</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onClick="{{wizCancel}}" style="font-size:12px">CANCEL</button>
+          <button class="btn btn-primary" onClick="{{wizNext}}" disabled="{{wizNextDisabled}}" style="font-size:12px">{{wizNextLabel}}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isEsims}}" hint-placeholder-val="{{ false }}">
+  <div style="padding:28px;display:flex;flex-direction:column;gap:28px;max-width:1280px;width:100%;margin:0 auto;box-sizing:border-box">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div>
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:6px">eSIMs</div>
+        <h1 style="font-family:var(--font-heading);font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0">14 892 provisioned</h1>
+      </div>
+      <input class="input" value="{{esimSearch}}" onChange="{{onEsimSearch}}" placeholder="Search ICCID or MSISDN…" style="min-width:280px;padding:10px 14px;font-size:14px;border:1.5px solid var(--color-divider)">
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);border:2px solid var(--color-text)">
+      <sc-for list="{{esimKpis}}" as="k" hint-placeholder-count="4">
+        <div style="{{k.style}}">
+          <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">{{k.label}}</div>
+          <div style="font-family:var(--font-heading);font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:10px">{{k.value}}</div>
+          <div style="font-size:12px;margin-top:6px;color:var(--color-neutral-700)">{{k.sub}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:28px;align-items:start">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--color-divider);padding-bottom:10px;gap:12px">
+          <div class="seg" style="display:flex;border:1px solid var(--color-divider)">
+            <sc-for list="{{esimStatusOpts}}" as="f" hint-placeholder-count="4">
+              <div onClick="{{f.onClick}}" style="{{f.style}}">{{f.label}}</div>
+            </sc-for>
+          </div>
+          <div style="font-size:12px;color:var(--color-neutral-700)">{{esimShownLabel}}</div>
+        </div>
+        <table class="table" style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:10px 8px 10px 0;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">ICCID</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">PLAN</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">OWNER</th>
+              <th style="text-align:right;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">DATA USED</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">EXPIRES</th>
+              <th style="text-align:right;padding:10px 0 10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{esimTableRows}}" as="e" hint-placeholder-count="8">
+              <tr onClick="{{e.onClick}}" style="cursor:pointer" style-hover="background:var(--color-accent-100)">
+                <td style="padding:11px 8px 11px 0;border-bottom:1px solid var(--color-neutral-300);font-weight:600">{{e.iccid}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">{{e.plan}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{e.owner}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right">
+                  <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+                    <div style="width:64px;height:8px;background:var(--color-neutral-200);border:1px solid var(--color-neutral-300)"><div style="height:100%;width:{{e.usedPct}};background:{{e.usedColor}}"></div></div>
+                    <span style="font-family:var(--font-heading);font-weight:800;white-space:nowrap">{{e.used}}</span>
+                  </div>
+                </td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{e.expires}}</td>
+                <td style="padding:11px 0 11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right"><span class="tag" style="{{e.tagStyle}}">{{e.status}}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px">
+          <div style="font-size:12px;color:var(--color-neutral-700)">{{esimPager.label}}</div>
+          <div style="display:flex;gap:8px">
+            <button onClick="{{esimPager.onPrev}}" disabled="{{esimPager.prevDisabled}}" style="{{esimPager.prevStyle}}">← PREV</button>
+            <button onClick="{{esimPager.onNext}}" disabled="{{esimPager.nextDisabled}}" style="{{esimPager.nextStyle}}">NEXT →</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:24px">
+        <sc-if value="{{selEsim}}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px solid var(--color-text)">
+            <div style="padding:18px;border-bottom:2px solid var(--color-divider)">
+              <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:8px">eSIM profile</div>
+              <div style="font-family:var(--font-heading);font-size:22px;font-weight:800">{{selEsim.plan}}</div>
+              <div style="font-size:13px;color:var(--color-neutral-700);margin-top:2px">{{selEsim.iccid}} · {{selEsim.owner}}</div>
+            </div>
+            <div style="padding:14px 18px;display:flex;flex-direction:column">
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Data used</span><span style="font-family:var(--font-heading);font-weight:800">{{selEsim.used}}</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Expires</span><span style="font-weight:600">{{selEsim.expires}}</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Status</span><span class="tag" style="{{selEsim.tagStyle}}">{{selEsim.status}}</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0"><span style="color:var(--color-neutral-700)">Activated</span><span style="font-weight:600">{{selEsim.activated}}</span></div>
+            </div>
+            <div style="padding:0 18px 18px;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" style="font-size:12px">RESEND QR</button>
+              <button class="btn btn-secondary" style="font-size:12px">{{selEsim.suspendLabel}}</button>
+              <button class="btn btn-ghost" onClick="{{closeEsim}}" style="font-size:12px">CLOSE ×</button>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{noSelEsim}}" hint-placeholder-val="{{ true }}">
+          <div style="border:1px dashed var(--color-divider);padding:24px;font-size:13px;color:var(--color-neutral-700)">Select a profile to inspect usage or resend the install QR.</div>
+        </sc-if>
+
+        <div>
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600;border-bottom:2px solid var(--color-divider);padding-bottom:10px">Sales by destination</div>
+          <sc-for list="{{esimDestSplit}}" as="c" hint-placeholder-count="4">
+            <div style="padding:12px 0;border-bottom:1px solid var(--color-neutral-300)">
+              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
+                <span style="font-weight:600">{{c.name}}</span>
+                <span style="font-family:var(--font-heading);font-weight:800">{{c.pct}}%</span>
+              </div>
+              <div style="height:10px;background:var(--color-neutral-200);border:1px solid var(--color-neutral-300)">
+                <div style="height:100%;width:{{c.width}};background:{{c.barColor}}"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isCatalog}}" hint-placeholder-val="{{ false }}">
+  <div style="padding:28px;display:flex;flex-direction:column;gap:28px;max-width:1280px;width:100%;margin:0 auto;box-sizing:border-box">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div>
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:6px">Catalog</div>
+        <h1 style="font-family:var(--font-heading);font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0">{{catCount}} products</h1>
+      </div>
+      <button class="btn btn-primary" onClick="{{openWizard}}" style="font-size:12px">+ NEW PRODUCT</button>
+    </div>
+
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--color-divider);padding-bottom:10px;gap:12px;flex-wrap:wrap">
+        <div class="seg" style="display:flex;border:1px solid var(--color-divider)">
+          <sc-for list="{{catTypeOpts}}" as="f" hint-placeholder-count="4">
+            <div onClick="{{f.onClick}}" style="{{f.style}}">{{f.label}}</div>
+          </sc-for>
+        </div>
+        <div style="font-size:12px;color:var(--color-neutral-700)">{{catShownLabel}}</div>
+      </div>
+      <table class="table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:10px 8px 10px 0;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">PRODUCT</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">TYPE</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">NETWORK</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">VALIDITY</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">BONUS</th>
+            <th style="text-align:right;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">PRICE</th>
+            <th style="text-align:right;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">SOLD (30 D)</th>
+            <th style="text-align:right;padding:10px 0 10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">STATUS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{catRows}}" as="p" hint-placeholder-count="10">
+            <tr>
+              <td style="padding:11px 8px 11px 0;border-bottom:1px solid var(--color-neutral-300);font-weight:600">{{p.name}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">{{p.type}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">{{p.network}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{p.validity}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">
+                <sc-if value="{{p.bonus}}" hint-placeholder-val="{{ false }}"><span class="tag tag-accent" style="font-size:10px">{{p.bonus}}</span></sc-if>
+                <sc-if value="{{p.noBonus}}" hint-placeholder-val="{{ true }}"><span style="color:var(--color-neutral-700)">—</span></sc-if>
+              </td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right;font-family:var(--font-heading);font-weight:800">{{p.price}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right">{{p.sold}}</td>
+              <td style="padding:11px 0 11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right">
+                <button onClick="{{p.onToggle}}" style="{{p.toggleStyle}}">{{p.statusLabel}}</button>
+              </td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px">
+        <div style="font-size:12px;color:var(--color-neutral-700)">{{catPager.label}}</div>
+        <div style="display:flex;gap:8px">
+          <button onClick="{{catPager.onPrev}}" disabled="{{catPager.prevDisabled}}" style="{{catPager.prevStyle}}">← PREV</button>
+          <button onClick="{{catPager.onNext}}" disabled="{{catPager.nextDisabled}}" style="{{catPager.nextStyle}}">NEXT →</button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--color-neutral-700);margin-top:10px">Click a status to enable or disable the product in the app instantly.</div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isTransactions}}" hint-placeholder-val="{{ false }}">
+  <div style="padding:28px;display:flex;flex-direction:column;gap:28px;max-width:1280px;width:100%;margin:0 auto;box-sizing:border-box">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div>
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:6px">Transactions</div>
+        <h1 style="font-family:var(--font-heading);font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0">{{txCount}} today</h1>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <input class="input" value="{{txSearch}}" onChange="{{onTxSearch}}" placeholder="Search MSISDN or ref…" style="min-width:260px;padding:10px 14px;font-size:14px;border:1.5px solid var(--color-divider)">
+        <button class="btn btn-secondary" style="font-size:12px">EXPORT CSV →</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);border:2px solid var(--color-text)">
+      <sc-for list="{{txKpis}}" as="k" hint-placeholder-count="4">
+        <div style="{{k.style}}">
+          <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">{{k.label}}</div>
+          <div style="font-family:var(--font-heading);font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:10px">{{k.value}}</div>
+          <div style="font-size:12px;margin-top:6px;color:var(--color-neutral-700)">{{k.sub}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--color-divider);padding-bottom:10px;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="seg" style="display:flex;border:1px solid var(--color-divider)">
+            <sc-for list="{{txStatusOpts}}" as="f" hint-placeholder-count="4">
+              <div onClick="{{f.onClick}}" style="{{f.style}}">{{f.label}}</div>
+            </sc-for>
+          </div>
+          <div class="seg" style="display:flex;border:1px solid var(--color-divider)">
+            <sc-for list="{{txNetOpts}}" as="f" hint-placeholder-count="4">
+              <div onClick="{{f.onClick}}" style="{{f.style}}">{{f.label}}</div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--color-neutral-700)">{{txShownLabel}}</div>
+      </div>
+      <table class="table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:10px 8px 10px 0;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">REF</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">TIME</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">TYPE</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">NETWORK</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">MSISDN</th>
+            <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">METHOD</th>
+            <th style="text-align:right;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">AMOUNT</th>
+            <th style="text-align:right;padding:10px 0 10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">STATUS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{txFullRows}}" as="t" hint-placeholder-count="10">
+            <tr onClick="{{t.onClick}}" style="cursor:pointer" style-hover="background:var(--color-accent-100)">
+              <td style="padding:11px 8px 11px 0;border-bottom:1px solid var(--color-neutral-300);font-weight:600">{{t.ref}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{t.time}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);font-weight:600">{{t.type}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">{{t.network}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{t.msisdn}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">{{t.method}}</td>
+              <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right;font-family:var(--font-heading);font-weight:800">{{t.amount}}</td>
+              <td style="padding:11px 0 11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right"><span class="tag" style="{{t.tagStyle}}">{{t.status}}</span></td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px">
+        <div style="font-size:12px;color:var(--color-neutral-700)">{{txPager.label}}</div>
+        <div style="display:flex;gap:8px">
+          <button onClick="{{txPager.onPrev}}" disabled="{{txPager.prevDisabled}}" style="{{txPager.prevStyle}}">← PREV</button>
+          <button onClick="{{txPager.onNext}}" disabled="{{txPager.nextDisabled}}" style="{{txPager.nextStyle}}">NEXT →</button>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{selTx}}" hint-placeholder-val="{{ false }}">
+      <div style="border:2px solid var(--color-text);display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
+        <div style="padding:18px;border-right:2px solid var(--color-divider)">
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:8px">Transaction {{selTx.ref}}</div>
+          <div style="font-family:var(--font-heading);font-size:22px;font-weight:800">{{selTx.type}}</div>
+          <div style="font-size:13px;color:var(--color-neutral-700);margin-top:2px">{{selTx.network}} · {{selTx.msisdn}} · {{selTx.time}}</div>
+        </div>
+        <div style="padding:14px 18px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Amount</span><span style="font-family:var(--font-heading);font-weight:800">{{selTx.amount}}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Method</span><span style="font-weight:600">{{selTx.method}}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0"><span style="color:var(--color-neutral-700)">Status</span><span class="tag" style="{{selTx.tagStyle}}">{{selTx.status}}</span></div>
+        </div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:8px;justify-content:center">
+          <sc-if value="{{selTx.canRetry}}" hint-placeholder-val="{{ false }}">
+            <button class="btn btn-primary" style="font-size:12px">RETRY DELIVERY</button>
+          </sc-if>
+          <button class="btn btn-secondary" style="font-size:12px">REFUND</button>
+          <button class="btn btn-ghost" onClick="{{closeTx}}" style="font-size:12px">CLOSE ×</button>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isCustomers}}" hint-placeholder-val="{{ false }}">
+  <div style="padding:28px;display:flex;flex-direction:column;gap:28px;max-width:1280px;width:100%;margin:0 auto;box-sizing:border-box">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div>
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:6px">Customers</div>
+        <h1 style="font-family:var(--font-heading);font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0">84 216 accounts</h1>
+      </div>
+      <input class="input" value="{{custSearch}}" onChange="{{onCustSearch}}" placeholder="Search name or number…" style="min-width:280px;padding:10px 14px;font-size:14px;border:1.5px solid var(--color-divider);background:var(--color-surface, #eae9e9)">
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);border:2px solid var(--color-text)">
+      <sc-for list="{{custKpis}}" as="k" hint-placeholder-count="4">
+        <div style="{{k.style}}">
+          <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">{{k.label}}</div>
+          <div style="font-family:var(--font-heading);font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:10px">{{k.value}}</div>
+          <div style="font-size:12px;margin-top:6px;color:var(--color-neutral-700)">{{k.sub}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:28px;align-items:start">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--color-divider);padding-bottom:10px">
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">{{custListLabel}}</div>
+          <div class="seg" style="display:flex;border:1px solid var(--color-divider)">
+            <sc-for list="{{custFilterOpts}}" as="f" hint-placeholder-count="3">
+              <div onClick="{{f.onClick}}" style="{{f.style}}">{{f.label}}</div>
+            </sc-for>
+          </div>
+        </div>
+        <table class="table" style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:10px 8px 10px 0;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">CUSTOMER</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">MSISDN</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">NETWORK</th>
+              <th style="text-align:right;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">LTV</th>
+              <th style="text-align:right;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">POINTS</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">LAST SEEN</th>
+              <th style="text-align:right;padding:10px 0 10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">SEGMENT</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{custRows}}" as="c" hint-placeholder-count="8">
+              <tr onClick="{{c.onClick}}" style="cursor:pointer" style-hover="background:var(--color-accent-100)">
+                <td style="padding:11px 8px 11px 0;border-bottom:1px solid var(--color-neutral-300)">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:28px;height:28px;flex:none;border:1.5px solid var(--color-text);display:grid;place-items:center;font-family:var(--font-heading);font-weight:800;font-size:10px">{{c.initials}}</div>
+                    <span style="font-weight:600">{{c.name}}</span>
+                  </div>
+                </td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{c.msisdn}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">{{c.network}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right;font-family:var(--font-heading);font-weight:800">{{c.ltv}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right">{{c.points}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{c.lastSeen}}</td>
+                <td style="padding:11px 0 11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right"><span class="tag" style="{{c.tagStyle}}">{{c.segment}}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px">
+          <div style="font-size:12px;color:var(--color-neutral-700)">{{custPager.label}}</div>
+          <div style="display:flex;gap:8px">
+            <button onClick="{{custPager.onPrev}}" disabled="{{custPager.prevDisabled}}" style="{{custPager.prevStyle}}">← PREV</button>
+            <button onClick="{{custPager.onNext}}" disabled="{{custPager.nextDisabled}}" style="{{custPager.nextStyle}}">NEXT →</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:24px">
+        <sc-if value="{{selCust}}" hint-placeholder-val="{{ false }}">
+          <div style="border:2px solid var(--color-text)">
+            <div style="padding:18px;border-bottom:2px solid var(--color-divider)">
+              <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:8px">Customer</div>
+              <div style="font-family:var(--font-heading);font-size:22px;font-weight:800">{{selCust.name}}</div>
+              <div style="font-size:13px;color:var(--color-neutral-700);margin-top:2px">{{selCust.network}} · {{selCust.msisdn}}</div>
+            </div>
+            <div style="padding:14px 18px;display:flex;flex-direction:column">
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Lifetime value</span><span style="font-family:var(--font-heading);font-weight:800">{{selCust.ltv}}</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Points balance</span><span style="font-weight:600">{{selCust.points}}</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">Purchases</span><span style="font-weight:600">{{selCust.purchases}}</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--color-neutral-300)"><span style="color:var(--color-neutral-700)">eSIMs</span><span style="font-weight:600">{{selCust.esims}}</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0"><span style="color:var(--color-neutral-700)">Joined</span><span style="font-weight:600">{{selCust.joined}}</span></div>
+            </div>
+            <div style="padding:0 18px 18px;display:flex;gap:8px">
+              <button class="btn btn-primary" style="font-size:12px">CREDIT POINTS</button>
+              <button class="btn btn-secondary" style="font-size:12px">SUSPEND</button>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{noSelCust}}" hint-placeholder-val="{{ true }}">
+          <div style="border:1px dashed var(--color-divider);padding:24px;font-size:13px;color:var(--color-neutral-700)">Select a customer row to see their account detail.</div>
+        </sc-if>
+
+        <div>
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600;border-bottom:2px solid var(--color-divider);padding-bottom:10px">Segments</div>
+          <sc-for list="{{segmentSplit}}" as="c" hint-placeholder-count="4">
+            <div style="padding:12px 0;border-bottom:1px solid var(--color-neutral-300)">
+              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
+                <span style="font-weight:600">{{c.name}}</span>
+                <span style="font-family:var(--font-heading);font-weight:800">{{c.pct}}%</span>
+              </div>
+              <div style="height:10px;background:var(--color-neutral-200);border:1px solid var(--color-neutral-300)">
+                <div style="height:100%;width:{{c.width}};background:{{c.barColor}}"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isAnalytics}}" hint-placeholder-val="{{ false }}">
+  <div style="padding:22px 28px 28px;display:flex;flex-direction:column;gap:18px;max-width:1280px;width:100%;margin:0 auto;box-sizing:border-box">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div>
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:6px">Analytics</div>
+        <h1 style="font-family:var(--font-heading);font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0">Revenue · {{anaTitle}}</h1>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="seg" style="display:flex;border:1px solid var(--color-divider)">
+          <sc-for list="{{anaRangeOpts}}" as="r" hint-placeholder-count="3">
+            <div onClick="{{r.onClick}}" style="{{r.style}}">{{r.label}}</div>
+          </sc-for>
+        </div>
+        <a style="font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:3px">Export report →</a>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);border:2px solid var(--color-text)">
+      <sc-for list="{{anaKpis}}" as="k" hint-placeholder-count="4">
+        <div style="{{k.style}}">
+          <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">{{k.label}}</div>
+          <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px;flex-wrap:wrap">
+            <span style="font-family:var(--font-heading);font-size:24px;font-weight:800;letter-spacing:-.02em;white-space:nowrap">{{k.value}}</span>
+            <span style="font-size:12px;color:{{k.deltaColor}};font-weight:600;white-space:nowrap">{{k.delta}}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--color-divider);padding-bottom:10px">
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">Gross revenue · {{anaTitle}}</div>
+        <div style="display:flex;gap:18px;font-size:11px;color:var(--color-neutral-700);align-items:center">
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:var(--color-accent);display:block"></span>Airtime + data</span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;background:var(--color-neutral-400);display:block"></span>eSIM</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;padding:14px 0 0">
+        <div style="display:flex;flex-direction:column;justify-content:space-between;height:150px;font-size:11px;color:var(--color-neutral-700);text-align:right;font-variant-numeric:tabular-nums">
+          <sc-for list="{{anaAxis}}" as="a" hint-placeholder-count="4">
+            <div>{{a.label}}</div>
+          </sc-for>
+        </div>
+        <div style="flex:1;border-left:1px solid var(--color-neutral-400);border-bottom:1px solid var(--color-neutral-400)">
+          <div style="display:flex;align-items:flex-end;gap:{{anaBarGap}};height:150px;padding:0 6px">
+            <sc-for list="{{anaBars}}" as="b" hint-placeholder-count="14">
+              <div title="{{b.tip}}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;cursor:default">
+                <div style="height:{{b.esimH}};background:var(--color-neutral-400)"></div>
+                <div style="height:{{b.mainH}};background:var(--color-accent)"></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:{{anaBarGap}};padding:8px 6px 0">
+            <sc-for list="{{anaBars}}" as="b" hint-placeholder-count="14">
+              <div style="flex:1;font-size:10px;color:var(--color-neutral-700);text-align:center;white-space:nowrap">{{b.label}}</div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:28px;align-items:start">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--color-divider);padding-bottom:10px">
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">Sales by product</div>
+          <div class="seg" style="display:flex;border:1px solid var(--color-divider)">
+            <sc-for list="{{anaSortOpts}}" as="o" hint-placeholder-count="2">
+              <div onClick="{{o.onClick}}" style="{{o.style}}">{{o.label}}</div>
+            </sc-for>
+          </div>
+        </div>
+        <table class="table" style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:10px 8px 10px 0;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">PRODUCT</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">TYPE</th>
+              <th style="text-align:right;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">UNITS</th>
+              <th style="text-align:right;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">REVENUE</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider);width:150px">SHARE</th>
+              <th style="text-align:right;padding:10px 0 10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">TREND</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{anaProducts}}" as="p" hint-placeholder-count="8">
+              <tr>
+                <td style="padding:11px 8px 11px 0;border-bottom:1px solid var(--color-neutral-300);font-weight:600">{{p.name}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{p.type}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right;font-variant-numeric:tabular-nums">{{p.units}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right;font-family:var(--font-heading);font-weight:800">{{p.revenue}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div style="flex:1;height:8px;background:var(--color-neutral-200);border:1px solid var(--color-neutral-300)">
+                      <div style="height:100%;width:{{p.width}};background:{{p.barColor}}"></div>
+                    </div>
+                    <span style="font-size:11px;color:var(--color-neutral-700);width:32px;text-align:right">{{p.share}}</span>
+                  </div>
+                </td>
+                <td style="padding:11px 0 11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right;font-weight:600;color:{{p.deltaColor}}">{{p.delta}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="font-size:12px;color:var(--color-neutral-700);margin-top:12px">{{anaProductFoot}}</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:24px">
+        <div>
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;border-bottom:2px solid var(--color-divider);padding-bottom:10px">Needs attention</div>
+          <sc-for list="{{anaAlerts}}" as="a" hint-placeholder-count="4">
+            <div style="padding:10px 0;border-bottom:1px solid var(--color-neutral-300);display:flex;flex-direction:column;gap:4px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="tag" style="{{a.tagStyle}}">{{a.level}}</span>
+                <span style="font-family:var(--font-heading);font-weight:800;font-size:13px">{{a.title}}</span>
+              </div>
+              <div style="font-size:12px;color:var(--color-neutral-700);line-height:1.45">{{a.detail}}</div>
+              <a onClick="{{a.onClick}}" style="font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px">{{a.action}} →</a>
+            </div>
+          </sc-for>
+        </div>
+
+        <div>
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600;border-bottom:2px solid var(--color-divider);padding-bottom:10px">Revenue by payment method</div>
+          <div style="display:flex;height:16px;margin-top:14px;border:1px solid var(--color-neutral-300)">
+            <sc-for list="{{anaMethods}}" as="m" hint-placeholder-count="5">
+              <div title="{{m.name}}" style="width:{{m.width}};background:{{m.barColor}}"></div>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-top:12px">
+            <sc-for list="{{anaMethods}}" as="m" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:7px;font-size:12px">
+                <span style="width:9px;height:9px;background:{{m.barColor}};display:block;flex-shrink:0"></span>
+                <span style="flex:1">{{m.name}}</span>
+                <span style="font-family:var(--font-heading);font-weight:800">{{m.pct}}%</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="border:2px solid var(--color-text);padding:14px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">Peak hour</div>
+            <div style="font-family:var(--font-heading);font-size:20px;font-weight:800;letter-spacing:-.01em">19:00 — 21:00</div>
+          </div>
+          <div style="font-size:12px;color:var(--color-neutral-700);margin-top:6px">28% of daily volume settles in this window. Mobile-money confirmation latency doubles after 20:30.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isOverview}}" hint-placeholder-val="{{ true }}">
+  <div style="padding:28px;display:flex;flex-direction:column;gap:28px;max-width:1280px;width:100%;margin:0 auto;box-sizing:border-box">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div>
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);font-weight:600;margin-bottom:6px">Operations overview</div>
+        <h1 style="font-family:var(--font-heading);font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0">Friday, Aug 08</h1>
+      </div>
+      <div class="seg" style="display:flex;border:1px solid var(--color-divider)">
+        <sc-for list="{{rangeOpts}}" as="r" hint-placeholder-count="3">
+          <div onClick="{{r.onClick}}" style="{{r.style}}">{{r.label}}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);border:2px solid var(--color-text)">
+      <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+        <div style="{{k.style}}">
+          <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">{{k.label}}</div>
+          <div style="font-family:var(--font-heading);font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:10px">{{k.value}}</div>
+          <div style="font-size:12px;margin-top:6px;color:{{k.deltaColor}};font-weight:600">{{k.delta}} <span style="color:var(--color-neutral-700);font-weight:400">vs prev.</span></div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:28px;align-items:start">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--color-divider);padding-bottom:10px">
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600">Latest transactions</div>
+          <a style="font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:3px">Export CSV →</a>
+        </div>
+        <table class="table" style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:10px 8px 10px 0;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">TIME</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">TYPE</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">NETWORK</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">MSISDN</th>
+              <th style="text-align:left;padding:10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">METHOD</th>
+              <th style="text-align:right;padding:10px 0 10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">AMOUNT</th>
+              <th style="text-align:right;padding:10px 0 10px 8px;font-family:var(--font-heading);font-size:11px;letter-spacing:.08em;border-bottom:2px solid var(--color-divider)">STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{txRows}}" as="t" hint-placeholder-count="8">
+              <tr>
+                <td style="padding:11px 8px 11px 0;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{t.time}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);font-weight:600">{{t.type}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">{{t.network}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300);color:var(--color-neutral-700)">{{t.msisdn}}</td>
+                <td style="padding:11px 8px;border-bottom:1px solid var(--color-neutral-300)">{{t.method}}</td>
+                <td style="padding:11px 0 11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right;font-family:var(--font-heading);font-weight:800">{{t.amount}}</td>
+                <td style="padding:11px 0 11px 8px;border-bottom:1px solid var(--color-neutral-300);text-align:right"><span class="tag" style="{{t.tagStyle}}">{{t.status}}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:24px">
+        <div>
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600;border-bottom:2px solid var(--color-divider);padding-bottom:10px">Volume by network</div>
+          <sc-for list="{{carrierSplit}}" as="c" hint-placeholder-count="3">
+            <div style="padding:12px 0;border-bottom:1px solid var(--color-neutral-300)">
+              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px">
+                <span style="font-weight:600">{{c.name}}</span>
+                <span style="font-family:var(--font-heading);font-weight:800">{{c.pct}}%</span>
+              </div>
+              <div style="height:10px;background:var(--color-neutral-200);border:1px solid var(--color-neutral-300)">
+                <div style="height:100%;width:{{c.width}};background:{{c.barColor}}"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div>
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-700);font-weight:600;border-bottom:2px solid var(--color-divider);padding-bottom:10px">Pending USSD approvals</div>
+          <sc-for list="{{pending}}" as="p" hint-placeholder-count="3">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--color-neutral-300);font-size:13px">
+              <div>
+                <div style="font-weight:600">{{p.desc}}</div>
+                <div style="font-size:11px;color:var(--color-neutral-700)">{{p.meta}}</div>
+              </div>
+              <span style="font-size:11px;color:var(--color-accent-700);font-weight:600;white-space:nowrap">{{p.age}}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:12px;color:var(--color-neutral-700);margin-top:10px">Auto-expire after 10 min without carrier confirmation.</div>
+        </div>
+
+        <div style="background:var(--color-accent);color:var(--color-bg);padding:18px">
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.85;font-weight:600">Daily deal · live</div>
+          <div style="font-family:var(--font-heading);font-size:24px;font-weight:800;letter-spacing:-.01em;margin-top:6px">2 GB — 800 FCFA</div>
+          <div style="font-size:12px;opacity:.85;margin-top:4px">{{dealStats}}</div>
+          <button class="btn" onClick="{{editDeal}}" style="margin-top:14px;background:var(--color-bg);color:var(--color-text);font-family:var(--font-heading);font-weight:800;font-size:12px;padding:10px 16px;border:none;cursor:pointer;text-align:left">EDIT DEAL →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startRange&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;today&quot;, &quot;week&quot;, &quot;month&quot;], &quot;default&quot;: &quot;today&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Behavior&quot;}}">
+class Component extends DCLogic {
+  state = { range: 'today', navSel: 'Overview', custSearch: '', custFilter: 'all', selCustId: null, txSearch: '', txStatus: 'all', txNet: 'all', selTxRef: null, catType: 'all', catalog: null, esimSearch: '', esimStatus: 'all', selEsimIccid: null, txPage: 0, custPage: 0, catPage: 0, esimPage: 0, anaRange: 'd14', anaSort: 'rev',
+    wizOpen: false, wizStep: 0, wizType: 'Data', wizName: '', wizPrice: '', wizValidity: '', wizNet: 'All', wizBonus: '' };
+  PAGE = 6;
+  pager(key, list, page) {
+    const pages = Math.max(1, Math.ceil(list.length / this.PAGE));
+    const p = Math.min(page, pages - 1);
+    const from = p * this.PAGE;
+    return {
+      rows: list.slice(from, from + this.PAGE),
+      label: list.length === 0 ? 'No results' : (from + 1) + '–' + Math.min(from + this.PAGE, list.length) + ' of ' + list.length,
+      prevDisabled: p === 0,
+      nextDisabled: p >= pages - 1,
+      prevStyle: 'cursor:pointer;border:1px solid var(--color-divider);background:none;font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:.06em;padding:7px 14px;' + (p === 0 ? 'opacity:.45;cursor:default' : ''),
+      nextStyle: 'cursor:pointer;border:1px solid var(--color-divider);background:none;font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:.06em;padding:7px 14px;' + (p >= pages - 1 ? 'opacity:.45;cursor:default' : ''),
+      onPrev: () => p > 0 && this.setState({ [key]: p - 1 }),
+      onNext: () => p < pages - 1 && this.setState({ [key]: p + 1 })
+    };
+  }
+  anaSets = {
+    d14: {
+      title: '14 days',
+      kpis: [
+        { label: 'Gross revenue', value: '41.2 M FCFA', delta: '+9.4%', up: true },
+        { label: 'Orders', value: '30 742', delta: '+6.8%', up: true },
+        { label: 'Avg order value', value: '1 340 FCFA', delta: '+2.1%', up: true },
+        { label: 'Refund rate', value: '0.6%', delta: '−0.1 pt', up: true }
+      ],
+      bars: [
+        ['Jul 26', 2.4, 0.30], ['27', 2.1, 0.22], ['28', 2.6, 0.34], ['29', 3.1, 0.28], ['30', 2.9, 0.41], ['31', 3.4, 0.36],
+        ['Aug 01', 3.8, 0.52], ['02', 2.7, 0.24], ['03', 2.3, 0.19], ['04', 3.2, 0.33], ['05', 3.5, 0.44], ['06', 3.6, 0.38], ['07', 3.9, 0.47], ['08', 4.3, 0.55]
+      ],
+      max: 5
+    },
+    d30: {
+      title: '30 days',
+      kpis: [
+        { label: 'Gross revenue', value: '84.7 M FCFA', delta: '+11.2%', up: true },
+        { label: 'Orders', value: '63 108', delta: '+7.4%', up: true },
+        { label: 'Avg order value', value: '1 302 FCFA', delta: '+1.4%', up: true },
+        { label: 'Refund rate', value: '0.7%', delta: '+0.1 pt', up: false }
+      ],
+      bars: [
+        ['Jul 10', 4.9, 0.51], ['12', 5.4, 0.60], ['14', 5.1, 0.44], ['16', 6.0, 0.72], ['18', 5.6, 0.58], ['20', 6.4, 0.66], ['22', 5.9, 0.49],
+        ['24', 6.2, 0.61], ['26', 4.5, 0.52], ['28', 5.7, 0.62], ['30', 6.3, 0.77], ['Aug 01', 6.5, 0.76], ['04', 5.5, 0.52], ['06', 7.1, 0.85], ['08', 8.2, 1.02]
+      ],
+      max: 9.5
+    },
+    d90: {
+      title: '90 days',
+      kpis: [
+        { label: 'Gross revenue', value: '238.4 M FCFA', delta: '+18.6%', up: true },
+        { label: 'Orders', value: '184 920', delta: '+14.1%', up: true },
+        { label: 'Avg order value', value: '1 289 FCFA', delta: '+3.9%', up: true },
+        { label: 'Refund rate', value: '0.8%', delta: '−0.3 pt', up: true }
+      ],
+      bars: [
+        ['W20', 14.2, 1.1], ['W21', 15.6, 1.4], ['W22', 15.1, 1.2], ['W23', 17.0, 1.8], ['W24', 16.4, 1.6], ['W25', 18.9, 2.1], ['W26', 17.8, 1.9],
+        ['W27', 19.6, 2.4], ['W28', 18.2, 2.0], ['W29', 20.4, 2.6], ['W30', 21.8, 2.9], ['W31', 22.6, 3.1], ['W32', 24.1, 3.4]
+      ],
+      max: 29
+    }
+  };
+  anaProductData = [
+    { name: '1 GB · 7 days', type: 'Data', unitsN: 8420, revN: 4210000, delta: '+14.2%', up: true },
+    { name: '5 000 FCFA top-up', type: 'Airtime', unitsN: 1980, revN: 9900000, delta: '+6.1%', up: true },
+    { name: '2 GB · daily deal', type: 'Data', unitsN: 6140, revN: 4912000, delta: '+38.4%', up: true },
+    { name: '1 000 FCFA top-up', type: 'Airtime', unitsN: 7310, revN: 7310000, delta: '−2.8%', up: false },
+    { name: 'West Africa · 5 GB', type: 'eSIM', unitsN: 512, revN: 6144000, delta: '+31.0%', up: true },
+    { name: '10 GB · 30 days', type: 'Data', unitsN: 940, revN: 3760000, delta: '+9.7%', up: true },
+    { name: '150 MB · 24 h', type: 'Data', unitsN: 4180, revN: 836000, delta: '−11.5%', up: false },
+    { name: 'Global · 3 GB', type: 'eSIM', unitsN: 188, revN: 3384000, delta: '+4.2%', up: true }
+  ];
+  anaAlertData = [
+    { level: 'HIGH', title: 'Moov Money failures at 7.4%', detail: 'Failure rate tripled since Aug 06, 21:00. 218 orders affected, 1.1 M FCFA unsettled. Carrier gateway timeouts.', action: 'Open transactions', go: 'Transactions' },
+    { level: 'HIGH', title: '412 USSD sessions expired', detail: 'Sessions abandoned before carrier confirmation over the last 24 h — 11 pt above baseline.', action: 'Review USSD queue', go: 'Overview' },
+    { level: 'WATCH', title: '150 MB bundle down 11.5%', detail: 'Cannibalised by the 2 GB daily deal. Margin per unit is the lowest in the catalog.', action: 'Open catalog', go: 'Catalog' },
+    { level: 'WATCH', title: '9 eSIMs stuck in PENDING', detail: 'Provisioned but never activated for 72 h+. Profiles expire after 7 days.', action: 'Open eSIM fleet', go: 'eSIMs' },
+    { level: 'INFO', title: '1 240 customers at risk', detail: 'No purchase in 60 days after prior monthly activity. Worth a bonus-points campaign.', action: 'Open customers', go: 'Customers' }
+  ];
+  anaMethodData = [
+    { name: 'Orange Money', pct: 41 }, { name: 'MTN MoMo', pct: 27 }, { name: 'Moov Money', pct: 14 }, { name: 'Card', pct: 12 }, { name: 'Wave', pct: 6 }
+  ];
+  analytics(s) {
+    const range = s.anaRange || 'd14';
+    const sort = s.anaSort || 'rev';
+    const d = this.anaSets[range];
+    const fmtN = n => n.toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ');
+    const segBase = 'padding:8px 16px;cursor:pointer;white-space:nowrap;font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:.06em;';
+    const segSmall = 'padding:6px 12px;cursor:pointer;white-space:nowrap;font-family:var(--font-heading);font-weight:800;font-size:10px;letter-spacing:.06em;';
+    const prods = [...this.anaProductData].sort((a, b) => sort === 'rev' ? b.revN - a.revN : b.unitsN - a.unitsN);
+    const topRev = prods.reduce((m, p) => Math.max(m, p.revN), 0);
+    const totalRev = prods.reduce((t, p) => t + p.revN, 0);
+    const alertTag = l => 'font-size:10px;font-weight:600;padding:3px 8px;' + (
+      l === 'HIGH' ? 'background:var(--color-accent);color:var(--color-bg)' :
+      l === 'WATCH' ? 'background:var(--color-accent-100);color:var(--color-accent-800)' :
+      'background:var(--color-neutral-200);color:var(--color-neutral-800)');
+    return {
+      anaTitle: d.title,
+      anaRangeOpts: [{ label: '14 DAYS', val: 'd14' }, { label: '30 DAYS', val: 'd30' }, { label: '90 DAYS', val: 'd90' }].map(r => ({
+        label: r.label,
+        onClick: () => this.setState({ anaRange: r.val }),
+        style: segBase + (range === r.val ? 'background:var(--color-text);color:var(--color-bg)' : 'color:var(--color-neutral-700)')
+      })),
+      anaKpis: d.kpis.map((k, i) => ({
+        ...k,
+        deltaColor: k.up ? 'var(--color-neutral-800)' : 'var(--color-accent-700)',
+        style: 'padding:12px 18px 14px' + (i < 3 ? ';border-right:2px solid var(--color-text)' : '')
+      })),
+      anaAxis: [1, 0.75, 0.5, 0.25, 0].map(f => ({ label: (d.max * f).toFixed(f === 0 ? 0 : 1) + (f === 1 ? ' M' : '') })),
+      anaBarGap: d.bars.length > 14 ? '4px' : '7px',
+      anaBars: d.bars.map(b => ({
+        label: b[0],
+        mainH: (b[1] / d.max * 100).toFixed(1) + '%',
+        esimH: (b[2] / d.max * 100).toFixed(1) + '%',
+        tip: b[0] + ' · ' + (b[1] + b[2]).toFixed(2) + ' M FCFA (eSIM ' + b[2].toFixed(2) + ' M)'
+      })),
+      anaSortOpts: [{ label: 'BY REVENUE', val: 'rev' }, { label: 'BY UNITS', val: 'units' }].map(o => ({
+        label: o.label,
+        onClick: () => this.setState({ anaSort: o.val }),
+        style: segSmall + (sort === o.val ? 'background:var(--color-text);color:var(--color-bg)' : 'color:var(--color-neutral-700)')
+      })),
+      anaProducts: prods.map((p, i) => ({
+        name: p.name,
+        type: p.type,
+        units: fmtN(p.unitsN),
+        revenue: (p.revN / 1000000).toFixed(2) + ' M',
+        share: Math.round(p.revN / totalRev * 100) + '%',
+        width: (p.revN / topRev * 100).toFixed(1) + '%',
+        barColor: i === 0 ? 'var(--color-accent)' : i < 3 ? 'var(--color-accent-300)' : 'var(--color-neutral-400)',
+        delta: p.delta,
+        deltaColor: p.up ? 'var(--color-neutral-800)' : 'var(--color-accent-700)'
+      })),
+      anaProductFoot: 'Top 8 of 24 products · ' + (totalRev / 1000000).toFixed(1) + ' M FCFA, 71% of catalog revenue over ' + d.title + '.',
+      anaAlerts: this.anaAlertData.map(a => ({
+        ...a, tagStyle: alertTag(a.level), onClick: () => this.setState({ navSel: a.go })
+      })),
+      anaMethods: this.anaMethodData.map((m, i) => ({
+        ...m, width: m.pct + '%',
+        barColor: ['var(--color-accent)', 'var(--color-accent-300)', 'var(--color-neutral-800)', 'var(--color-neutral-500)', 'var(--color-neutral-300)'][i]
+      }))
+    };
+  }
+  esimFleet = [
+    { iccid: '···· 8842', plan: 'Orange CI · 5 GB', owner: 'Kouassi A. · 07 09 •• •• 34', usedN: 52, used: '2.6 / 5 GB', expires: 'Sep 01', status: 'ACTIVE', activated: 'Aug 01' },
+    { iccid: '···· 3317', plan: 'West Africa · 5 GB', owner: 'Kouassi A. · 07 09 •• •• 34', usedN: 4, used: '0.2 / 5 GB', expires: 'Aug 21', status: 'PAUSED', activated: 'Aug 06' },
+    { iccid: '···· 9104', plan: 'MTN CI · 10 GB', owner: 'Awa Koné · 05 44 •• •• 90', usedN: 91, used: '9.1 / 10 GB', expires: 'Aug 12', status: 'ACTIVE', activated: 'Jul 13' },
+    { iccid: '···· 2276', plan: 'Ghana · 3 GB', owner: 'Ibrahim T. · 07 62 •• •• 19', usedN: 67, used: '2.0 / 3 GB', expires: 'Aug 15', status: 'ACTIVE', activated: 'Jul 31' },
+    { iccid: '···· 5530', plan: 'Global · 3 GB', owner: 'Mariam D. · 01 02 •• •• 65', usedN: 100, used: '3.0 / 3 GB', expires: 'Expired', status: 'EXPIRED', activated: 'Jul 10' },
+    { iccid: '···· 7719', plan: 'France · 3 GB', owner: 'Yao N. · 05 12 •• •• 77', usedN: 0, used: '0 / 3 GB', expires: 'Not activated', status: 'PENDING', activated: '—' },
+    { iccid: '···· 4408', plan: 'Moov CI · 3 GB', owner: 'Fatou B. · 07 31 •• •• 88', usedN: 33, used: '1.0 / 3 GB', expires: 'Sep 04', status: 'ACTIVE', activated: 'Aug 05' },
+    { iccid: '···· 1163', plan: 'West Africa · 10 GB', owner: 'Sékou O. · 01 44 •• •• 03', usedN: 12, used: '1.2 / 10 GB', expires: 'Sep 02', status: 'ACTIVE', activated: 'Aug 03' }
+  ];
+  catalogSeed = [
+    { id: 1, name: '150 MB', type: 'Data', network: 'All', validity: '24 h', bonus: null, priceN: 200, sold: '18 410', active: true },
+    { id: 2, name: '1 GB', type: 'Data', network: 'All', validity: '7 days', bonus: null, priceN: 500, sold: '42 118', active: true },
+    { id: 3, name: '3 GB', type: 'Data', network: 'All', validity: '30 days', bonus: '+500 MB', priceN: 1500, sold: '28 904', active: true },
+    { id: 4, name: '5 GB', type: 'Data', network: 'All', validity: '30 days', bonus: null, priceN: 2500, sold: '15 662', active: true },
+    { id: 5, name: '10 GB', type: 'Data', network: 'All', validity: '30 days', bonus: '+2 GB', priceN: 5000, sold: '9 340', active: true },
+    { id: 6, name: 'Night 2 GB', type: 'Data', network: 'All', validity: '00:00–06:00', bonus: null, priceN: 300, sold: '11 207', active: false },
+    { id: 7, name: '2 GB · Daily deal', type: 'Deal', network: 'All', validity: '7 days', bonus: '−33%', priceN: 800, sold: '27 480', active: true },
+    { id: 8, name: 'Airtime 1 000+', type: 'Airtime', network: 'All', validity: '—', bonus: '+5% BONUS', priceN: 1000, sold: '61 022', active: true },
+    { id: 9, name: 'Airtime 5 000+', type: 'Airtime', network: 'All', validity: '—', bonus: '+10% BONUS', priceN: 5000, sold: '22 815', active: true },
+    { id: 10, name: 'Orange eSIM · 5 GB', type: 'eSIM', network: 'Orange', validity: '30 days', bonus: null, priceN: 3000, sold: '3 108', active: true },
+    { id: 11, name: 'MTN eSIM · 10 GB', type: 'eSIM', network: 'MTN', validity: '30 days', bonus: '+1 GB', priceN: 5000, sold: '2 411', active: true },
+    { id: 12, name: 'West Africa · 5 GB', type: 'eSIM', network: 'Travel', validity: '15 days', bonus: null, priceN: 6500, sold: '1 240', active: true },
+    { id: 13, name: 'Global · 3 GB', type: 'eSIM', network: 'Travel', validity: '15 days', bonus: null, priceN: 9000, sold: '656', active: false }
+  ];
+  txFull = [
+    { ref: 'TP-9214', time: '14:32:08', type: 'Data · 2 GB deal', network: 'Orange', msisdn: '07 09 •• •• 34', method: 'Orange Money', amountN: 800, status: 'DELIVERED' },
+    { ref: 'TP-9213', time: '14:31:54', type: 'eSIM · Ghana 3 GB', network: 'Travel', msisdn: '05 44 •• •• 90', method: 'Card', amountN: 7500, status: 'DELIVERED' },
+    { ref: 'TP-9212', time: '14:31:12', type: 'Airtime', network: 'MTN', msisdn: '05 12 •• •• 77', method: 'MTN MoMo', amountN: 2000, status: 'PENDING' },
+    { ref: 'TP-9211', time: '14:30:47', type: 'Data · 10 GB', network: 'Orange', msisdn: '07 55 •• •• 02', method: 'Orange Money', amountN: 5000, status: 'DELIVERED' },
+    { ref: 'TP-9210', time: '14:29:33', type: 'Airtime · custom', network: 'Moov', msisdn: '01 02 •• •• 65', method: 'Moov Money', amountN: 3500, status: 'DELIVERED' },
+    { ref: 'TP-9209', time: '14:28:51', type: 'Data · 1 GB', network: 'MTN', msisdn: '05 88 •• •• 41', method: 'MTN MoMo', amountN: 500, status: 'FAILED' },
+    { ref: 'TP-9208', time: '14:28:02', type: 'eSIM · CI Orange 5 GB', network: 'Orange', msisdn: '—', method: 'Card', amountN: 3000, status: 'DELIVERED' },
+    { ref: 'TP-9207', time: '14:27:19', type: 'Data · 3 GB', network: 'Orange', msisdn: '07 31 •• •• 88', method: 'Orange Money', amountN: 1500, status: 'DELIVERED' },
+    { ref: 'TP-9206', time: '14:26:40', type: 'Airtime', network: 'Moov', msisdn: '01 44 •• •• 03', method: 'Moov Money', amountN: 1000, status: 'FAILED' },
+    { ref: 'TP-9205', time: '14:25:58', type: 'Data · 5 GB', network: 'MTN', msisdn: '05 67 •• •• 22', method: 'MTN MoMo', amountN: 2500, status: 'DELIVERED' },
+    { ref: 'TP-9204', time: '14:24:31', type: 'eSIM · West Africa 5 GB', network: 'Travel', msisdn: '—', method: 'Card', amountN: 6500, status: 'DELIVERED' },
+    { ref: 'TP-9203', time: '14:23:12', type: 'Airtime', network: 'Orange', msisdn: '07 62 •• •• 19', method: 'Orange Money', amountN: 5000, status: 'PENDING' }
+  ];
+  customers = [
+    { id: 1, name: 'Kouassi A.', initials: 'KA', msisdn: '07 09 55 12 34', network: 'Orange', ltvN: 148500, points: '1 240', purchases: 214, esims: 2, joined: 'Mar 2024', segment: 'VIP' },
+    { id: 2, name: 'Awa Koné', initials: 'AK', msisdn: '05 44 21 78 90', network: 'MTN', ltvN: 96200, points: '840', purchases: 156, esims: 1, joined: 'Jun 2024', segment: 'VIP' },
+    { id: 3, name: 'Ibrahim Traoré', initials: 'IT', msisdn: '07 62 08 44 19', network: 'Orange', ltvN: 61800, points: '412', purchases: 98, esims: 0, joined: 'Jan 2025', segment: 'ACTIVE' },
+    { id: 4, name: 'Mariam Diabaté', initials: 'MD', msisdn: '01 02 33 47 65', network: 'Moov', ltvN: 48300, points: '390', purchases: 77, esims: 1, joined: 'Sep 2024', segment: 'ACTIVE' },
+    { id: 5, name: 'Yao N’Guessan', initials: 'YN', msisdn: '05 12 90 31 77', network: 'MTN', ltvN: 32750, points: '205', purchases: 54, esims: 0, joined: 'Feb 2025', segment: 'ACTIVE' },
+    { id: 6, name: 'Fatou Bamba', initials: 'FB', msisdn: '07 31 44 02 88', network: 'Orange', ltvN: 18400, points: '96', purchases: 31, esims: 1, joined: 'Nov 2025', segment: 'NEW' },
+    { id: 7, name: 'Sékou Ouattara', initials: 'SO', msisdn: '01 44 87 20 03', network: 'Moov', ltvN: 9600, points: '48', purchases: 12, esims: 0, joined: 'May 2026', segment: 'NEW' },
+    { id: 8, name: 'Adjoua Kouamé', initials: 'AD', msisdn: '05 88 13 55 41', network: 'MTN', ltvN: 5200, points: '12', purchases: 6, esims: 0, joined: 'Oct 2025', segment: 'AT RISK' }
+  ];
+  lastSeen = { 1: '2 min ago', 2: '1 h ago', 3: 'Today 09:14', 4: 'Yesterday', 5: 'Yesterday', 6: 'Aug 05', 7: 'Aug 04', 8: 'Jun 30' };
+  fmt(n) { return n.toLocaleString('fr-FR').replace(/\u202f|,/g, ' '); }
+  data = {
+    today: {
+      kpis: [
+        { label: 'Gross volume', value: '4.82 M FCFA', delta: '+12.4%', up: true },
+        { label: 'Transactions', value: '9 214', delta: '+8.1%', up: true },
+        { label: 'eSIMs sold', value: '312', delta: '+31.0%', up: true },
+        { label: 'Failed payments', value: '1.8%', delta: '−0.4 pt', up: true }
+      ],
+      split: [ { name: 'Orange', pct: 52 }, { name: 'MTN', pct: 33 }, { name: 'Moov', pct: 15 } ],
+      deal: '1 204 sold · 41% of daily cap · ends 23:59'
+    },
+    week: {
+      kpis: [
+        { label: 'Gross volume', value: '31.6 M FCFA', delta: '+9.2%', up: true },
+        { label: 'Transactions', value: '61 480', delta: '+5.7%', up: true },
+        { label: 'eSIMs sold', value: '1 892', delta: '+24.3%', up: true },
+        { label: 'Failed payments', value: '2.1%', delta: '+0.2 pt', up: false }
+      ],
+      split: [ { name: 'Orange', pct: 50 }, { name: 'MTN', pct: 34 }, { name: 'Moov', pct: 16 } ],
+      deal: '6 830 sold this week · avg 43% of cap'
+    },
+    month: {
+      kpis: [
+        { label: 'Gross volume', value: '128.4 M FCFA', delta: '+14.8%', up: true },
+        { label: 'Transactions', value: '248 902', delta: '+11.3%', up: true },
+        { label: 'eSIMs sold', value: '7 415', delta: '+38.9%', up: true },
+        { label: 'Failed payments', value: '2.0%', delta: '−0.6 pt', up: true }
+      ],
+      split: [ { name: 'Orange', pct: 51 }, { name: 'MTN', pct: 33 }, { name: 'Moov', pct: 16 } ],
+      deal: '27 480 sold this month · best day Aug 02'
+    }
+  };
+  txData = [
+    { time: '14:32:08', type: 'Data · 2 GB deal', network: 'Orange', msisdn: '07 09 •• •• 34', method: 'Orange Money', amount: '800', status: 'DELIVERED' },
+    { time: '14:31:54', type: 'eSIM · Ghana 3 GB', network: 'Travel', msisdn: '05 44 •• •• 90', method: 'Card', amount: '7 500', status: 'DELIVERED' },
+    { time: '14:31:12', type: 'Airtime', network: 'MTN', msisdn: '05 12 •• •• 77', method: 'MTN MoMo', amount: '2 000', status: 'PENDING' },
+    { time: '14:30:47', type: 'Data · 10 GB', network: 'Orange', msisdn: '07 55 •• •• 02', method: 'Orange Money', amount: '5 000', status: 'DELIVERED' },
+    { time: '14:29:33', type: 'Airtime · custom', network: 'Moov', msisdn: '01 02 •• •• 65', method: 'Moov Money', amount: '3 500', status: 'DELIVERED' },
+    { time: '14:28:51', type: 'Data · 1 GB', network: 'MTN', msisdn: '05 88 •• •• 41', method: 'MTN MoMo', amount: '500', status: 'FAILED' },
+    { time: '14:28:02', type: 'eSIM · CI Orange 5 GB', network: 'Orange', msisdn: '—', method: 'Card', amount: '3 000', status: 'DELIVERED' },
+    { time: '14:27:19', type: 'Reward · 1 GB', network: 'Orange', msisdn: '07 31 •• •• 88', method: 'Points', amount: '−900 pts', status: 'DELIVERED' }
+  ];
+  pendingData = [
+    { desc: '2 000 FCFA airtime · MTN MoMo', meta: '05 12 •• •• 77 · *133*1*2000#', age: '38 s' },
+    { desc: '5 GB data · Orange Money', meta: '07 62 •• •• 19 · #144*82*2500#', age: '1 m 12 s' },
+    { desc: '800 FCFA deal · Moov Money', meta: '01 44 •• •• 03 · *855*4*800#', age: '4 m 51 s' }
+  ];
+  renderVals() {
+    const s = this.state;
+    const d = this.data[s.range];
+    const segBase = 'padding:9px 18px;cursor:pointer;font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:.06em;';
+    const segTag = seg => 'font-size:10px;font-weight:600;padding:3px 8px;' + (
+      seg === 'VIP' ? 'background:var(--color-accent);color:var(--color-bg)' :
+      seg === 'AT RISK' ? 'background:var(--color-accent-100);color:var(--color-accent-800)' :
+      'background:var(--color-neutral-200);color:var(--color-neutral-800)');
+    const q = s.custSearch.trim().toLowerCase();
+    const filtered = this.customers.filter(c =>
+      (s.custFilter === 'all' || c.segment === s.custFilter) &&
+      (!q || c.name.toLowerCase().includes(q) || c.msisdn.replace(/\s/g, '').includes(q.replace(/\s/g, ''))));
+    const sel = this.customers.find(c => c.id === s.selCustId) || null;
+    const custPager = this.pager('custPage', filtered, s.custPage);
+    const txQ = s.txSearch.trim().toLowerCase().replace(/\s/g, '');
+    const txFiltered = this.txFull.filter(t =>
+      (s.txStatus === 'all' || t.status === s.txStatus) &&
+      (s.txNet === 'all' || t.network === s.txNet) &&
+      (!txQ || t.ref.toLowerCase().includes(txQ) || t.msisdn.replace(/\s/g, '').includes(txQ)));
+    const selTxRaw = this.txFull.find(t => t.ref === s.selTxRef) || null;
+    const cat = s.catalog || this.catalogSeed;
+    const catFiltered = cat.filter(p => s.catType === 'all' || p.type === s.catType);
+    const eQ = s.esimSearch.trim().toLowerCase().replace(/\s/g, '');
+    const esimFiltered = this.esimFleet.filter(e =>
+      (s.esimStatus === 'all' || e.status === s.esimStatus) &&
+      (!eQ || e.iccid.replace(/\s/g, '').includes(eQ) || e.owner.toLowerCase().replace(/\s/g, '').includes(eQ)));
+    const selEsimRaw = this.esimFleet.find(e => e.iccid === s.selEsimIccid) || null;
+    const esimTag = st => 'font-size:10px;font-weight:600;padding:3px 8px;' + (
+      st === 'ACTIVE' ? 'background:var(--color-accent-100);color:var(--color-accent-800)' :
+      st === 'EXPIRED' ? 'background:var(--color-accent);color:var(--color-bg)' :
+      'background:var(--color-neutral-200);color:var(--color-neutral-800)');
+    const txPager = this.pager('txPage', txFiltered, s.txPage);
+    const catPager = this.pager('catPage', catFiltered, s.catPage);
+    const esimPager = this.pager('esimPage', esimFiltered, s.esimPage);
+    const pageReset = { txStatus: 'txPage', txNet: 'txPage', catType: 'catPage', esimStatus: 'esimPage', custFilter: 'custPage' };
+    const segSmall = (opts, active, key) => opts.map(f => ({
+      label: f.label,
+      onClick: () => this.setState({ [key]: f.val, [pageReset[key] || 'txPage']: 0 }),
+      style: 'padding:7px 14px;cursor:pointer;font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:.06em;' +
+        (active === f.val ? 'background:var(--color-text);color:var(--color-bg)' : 'color:var(--color-neutral-700)')
+    }));
+    const tagFor = st => 'font-size:10px;font-weight:600;padding:3px 8px;' + (
+      st === 'DELIVERED' ? 'background:var(--color-neutral-200);color:var(--color-neutral-800)' :
+      st === 'PENDING' ? 'background:var(--color-accent-100);color:var(--color-accent-800)' :
+      'background:var(--color-accent);color:var(--color-bg)');
+    return {
+      ...this.analytics(s),
+      navLinks: ['Overview', 'Analytics', 'Transactions', 'Catalog', 'eSIMs', 'Customers'].map(l => ({
+        label: l,
+        onClick: () => this.setState({ navSel: l }),
+        style: 'font-size:13px;cursor:pointer;text-decoration:none;padding:4px 0;font-weight:600;' +
+          (s.navSel === l ? 'color:var(--color-text);box-shadow:inset 0 -2px 0 var(--color-accent)' : 'color:var(--color-neutral-700)')
+      })),
+      rangeOpts: [
+        { label: 'TODAY', val: 'today' }, { label: '7 DAYS', val: 'week' }, { label: '30 DAYS', val: 'month' }
+      ].map(r => ({
+        label: r.label,
+        onClick: () => this.setState({ range: r.val }),
+        style: segBase + (s.range === r.val ? 'background:var(--color-text);color:var(--color-bg)' : 'color:var(--color-neutral-700)')
+      })),
+      kpis: d.kpis.map((k, i) => ({
+        ...k,
+        deltaColor: k.up ? 'var(--color-neutral-800)' : 'var(--color-accent-700)',
+        style: 'padding:20px' + (i < 3 ? ';border-right:2px solid var(--color-text)' : '')
+      })),
+      txRows: this.txData.map(t => ({
+        ...t,
+        amount: t.amount.includes('pts') ? t.amount : t.amount + ' FCFA',
+        tagStyle: tagFor(t.status)
+      })),
+      carrierSplit: d.split.map((c, i) => ({
+        ...c, width: c.pct + '%',
+        barColor: i === 0 ? 'var(--color-accent)' : i === 1 ? 'var(--color-accent-300)' : 'var(--color-neutral-400)'
+      })),
+      pending: this.pendingData,
+      dealStats: d.deal,
+      editDeal: () => {},
+      isOverview: !['Customers', 'Transactions', 'Catalog', 'eSIMs', 'Analytics'].includes(s.navSel),
+      isAnalytics: s.navSel === 'Analytics',
+      isEsims: s.navSel === 'eSIMs',
+      esimSearch: s.esimSearch,
+      onEsimSearch: e => this.setState({ esimSearch: e.target.value, esimPage: 0 }),
+      esimShownLabel: esimFiltered.length + ' of ' + this.esimFleet.length + ' shown',
+      esimStatusOpts: segSmall([
+        { label: 'ALL', val: 'all' }, { label: 'ACTIVE', val: 'ACTIVE' }, { label: 'PAUSED', val: 'PAUSED' }, { label: 'PENDING', val: 'PENDING' }, { label: 'EXPIRED', val: 'EXPIRED' }
+      ], s.esimStatus, 'esimStatus'),
+      esimPager,
+      esimTableRows: esimPager.rows.map(e => ({
+        ...e,
+        usedPct: e.usedN + '%',
+        usedColor: e.usedN >= 85 ? 'var(--color-accent)' : 'var(--color-accent-300)',
+        tagStyle: esimTag(e.status),
+        onClick: () => this.setState({ selEsimIccid: e.iccid })
+      })),
+      selEsim: selEsimRaw ? { ...selEsimRaw, tagStyle: esimTag(selEsimRaw.status), suspendLabel: selEsimRaw.status === 'ACTIVE' ? 'SUSPEND' : 'REACTIVATE' } : null,
+      noSelEsim: !selEsimRaw,
+      closeEsim: () => this.setState({ selEsimIccid: null }),
+      esimKpis: [
+        { label: 'Active profiles', value: '11 204', sub: '75% of provisioned' },
+        { label: 'Sold (30 d)', value: '7 415', sub: '+38.9% vs prev.' },
+        { label: 'Install rate', value: '92%', sub: 'QR scanned within 24 h' },
+        { label: 'Travel share', value: '41%', sub: 'of eSIM revenue' }
+      ].map((k, i) => ({ ...k, style: 'padding:20px' + (i < 3 ? ';border-right:2px solid var(--color-text)' : '') })),
+      esimDestSplit: [
+        { name: 'Côte d’Ivoire', pct: 46 }, { name: 'West Africa', pct: 24 }, { name: 'Europe', pct: 17 }, { name: 'Global & other', pct: 13 }
+      ].map((c, i) => ({
+        ...c, width: c.pct + '%',
+        barColor: i === 0 ? 'var(--color-accent)' : i === 1 ? 'var(--color-accent-300)' : i === 2 ? 'var(--color-neutral-400)' : 'var(--color-neutral-300)'
+      })),
+      isCatalog: s.navSel === 'Catalog',
+      wizOpen: s.wizOpen,
+      openWizard: () => this.setState({ wizOpen: true, wizStep: 0, wizType: 'Data', wizName: '', wizPrice: '', wizValidity: '', wizNet: 'All', wizBonus: '' }),
+      wizCancel: () => this.setState({ wizOpen: false }),
+      stopProp: e => e.stopPropagation(),
+      wizStepNum: s.wizStep + 1,
+      wizTitle: ['Choose a type', 'Product details', 'Review & create'][s.wizStep],
+      wizSteps: ['TYPE', 'DETAILS', 'REVIEW'].map((l, i) => ({
+        label: (i + 1) + ' — ' + l,
+        style: 'flex:1;padding:10px 16px;font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:.06em;' +
+          (i < 2 ? 'border-right:2px solid var(--color-divider);' : '') +
+          (i === s.wizStep ? 'background:var(--color-text);color:var(--color-bg)' : i < s.wizStep ? 'color:var(--color-accent-700)' : 'color:var(--color-neutral-600)')
+      })),
+      wizIsType: s.wizStep === 0, wizIsDetails: s.wizStep === 1, wizIsReview: s.wizStep === 2,
+      wizTypeCells: [
+        { name: 'Data', sub: 'Bundles by size and validity' },
+        { name: 'Airtime', sub: 'Credit denominations and bonuses' },
+        { name: 'eSIM', sub: 'Local or travel profiles' },
+        { name: 'Deal', sub: 'Time-limited discounted pack' }
+      ].map((t, i) => ({
+        ...t,
+        onClick: () => this.setState({ wizType: t.name }),
+        style: 'padding:18px;cursor:pointer;border:2px solid ' +
+          (s.wizType === t.name ? 'var(--color-accent);background:var(--color-accent-100)' : 'var(--color-neutral-300)') +
+          (i % 2 === 0 ? ';margin-right:-2px' : '') + (i < 2 ? ';margin-bottom:-2px' : '')
+      })),
+      wizName: s.wizName,
+      wizNamePh: s.wizType === 'Data' ? 'e.g. 20 GB' : s.wizType === 'Airtime' ? 'e.g. Airtime 25 000+' : s.wizType === 'eSIM' ? 'e.g. Senegal eSIM · 5 GB' : 'e.g. 5 GB weekend deal',
+      onWizName: e => this.setState({ wizName: e.target.value }),
+      wizPrice: s.wizPrice,
+      onWizPrice: e => {
+        const d = e.target.value.replace(/\D/g, '').slice(0, 7);
+        this.setState({ wizPrice: d ? Number(d).toLocaleString('fr-FR').replace(/\u202f|,/g, ' ') : '' });
+      },
+      wizValidity: s.wizValidity,
+      onWizValidity: e => this.setState({ wizValidity: e.target.value }),
+      wizValidityShown: s.wizValidity || '—',
+      wizBonus: s.wizBonus,
+      onWizBonus: e => this.setState({ wizBonus: e.target.value }),
+      wizBonusSet: !!s.wizBonus.trim(),
+      wizNet: s.wizNet,
+      wizNetCells: ['All', 'Orange', 'MTN', 'Moov', 'Travel'].map(n => ({
+        name: n,
+        onClick: () => this.setState({ wizNet: n }),
+        style: 'padding:10px 4px;text-align:center;cursor:pointer;font-family:var(--font-heading);font-weight:800;font-size:12px;border:1.5px solid ' +
+          (s.wizNet === n ? 'var(--color-accent);background:var(--color-accent-100)' : 'var(--color-neutral-300);color:var(--color-neutral-700)')
+      })),
+      wizType: s.wizType,
+      wizPriceFmt: s.wizPrice ? s.wizPrice + ' FCFA' : '—',
+      wizBackVis: s.wizStep === 0 ? 'hidden' : 'visible',
+      wizBack: () => this.setState({ wizStep: Math.max(0, s.wizStep - 1) }),
+      wizNextLabel: s.wizStep === 2 ? 'CREATE PRODUCT →' : 'NEXT →',
+      wizNextDisabled: s.wizStep === 1 && (!s.wizName.trim() || !s.wizPrice),
+      wizNext: () => {
+        if (s.wizStep < 2) {
+          if (s.wizStep === 1 && (!s.wizName.trim() || !s.wizPrice)) return;
+          this.setState({ wizStep: s.wizStep + 1 });
+          return;
+        }
+        const prod = {
+          id: Date.now(), name: s.wizName.trim(), type: s.wizType, network: s.wizNet,
+          validity: s.wizValidity || '—', bonus: s.wizBonus.trim() || null,
+          priceN: Number(s.wizPrice.replace(/\D/g, '')), sold: '0', active: false
+        };
+        this.setState({ catalog: [prod, ...cat], wizOpen: false, catType: 'all', catPage: 0 });
+      },
+      catCount: String((s.catalog || this.catalogSeed).length),
+      catShownLabel: catFiltered.length + ' shown',
+      catTypeOpts: segSmall([
+        { label: 'ALL', val: 'all' }, { label: 'DATA', val: 'Data' }, { label: 'AIRTIME', val: 'Airtime' }, { label: 'ESIM', val: 'eSIM' }, { label: 'DEALS', val: 'Deal' }
+      ], s.catType, 'catType'),
+      catPager,
+      catRows: catPager.rows.map(p => ({
+        ...p,
+        noBonus: !p.bonus,
+        price: this.fmt(p.priceN) + ' FCFA',
+        statusLabel: p.active ? 'ACTIVE' : 'DISABLED',
+        toggleStyle: 'cursor:pointer;border:none;font-family:var(--font-heading);font-weight:800;font-size:10px;letter-spacing:.06em;padding:4px 10px;' +
+          (p.active ? 'background:var(--color-accent-100);color:var(--color-accent-800)' : 'background:var(--color-neutral-200);color:var(--color-neutral-700)'),
+        onToggle: () => this.setState({ catalog: cat.map(x => x.id === p.id ? { ...x, active: !x.active } : x) })
+      })),
+      isCustomers: s.navSel === 'Customers',
+      isTransactions: s.navSel === 'Transactions',
+      txCount: '9 214',
+      txSearch: s.txSearch,
+      onTxSearch: e => this.setState({ txSearch: e.target.value, txPage: 0 }),
+      txShownLabel: txFiltered.length + ' of ' + this.txFull.length + ' shown',
+      txStatusOpts: segSmall([
+        { label: 'ALL', val: 'all' }, { label: 'DELIVERED', val: 'DELIVERED' }, { label: 'PENDING', val: 'PENDING' }, { label: 'FAILED', val: 'FAILED' }
+      ], s.txStatus, 'txStatus'),
+      txNetOpts: segSmall([
+        { label: 'ALL', val: 'all' }, { label: 'ORANGE', val: 'Orange' }, { label: 'MTN', val: 'MTN' }, { label: 'MOOV', val: 'Moov' }
+      ], s.txNet, 'txNet'),
+      txPager,
+      txFullRows: txPager.rows.map(t => ({
+        ...t,
+        amount: this.fmt(t.amountN) + ' FCFA',
+        tagStyle: tagFor(t.status),
+        onClick: () => this.setState({ selTxRef: t.ref })
+      })),
+      selTx: selTxRaw ? { ...selTxRaw, amount: this.fmt(selTxRaw.amountN) + ' FCFA', tagStyle: tagFor(selTxRaw.status), canRetry: selTxRaw.status !== 'DELIVERED' } : null,
+      closeTx: () => this.setState({ selTxRef: null }),
+      txKpis: [
+        { label: 'Success rate', value: '97.4%', sub: 'last 24 h' },
+        { label: 'Avg ticket', value: '2 340 FCFA', sub: 'per transaction' },
+        { label: 'Mobile money', value: '78%', sub: 'of volume · 22% card' },
+        { label: 'Refunds', value: '14', sub: '31 200 FCFA today' }
+      ].map((k, i) => ({ ...k, style: 'padding:20px' + (i < 3 ? ';border-right:2px solid var(--color-text)' : '') })),
+      custSearch: s.custSearch,
+      onCustSearch: e => this.setState({ custSearch: e.target.value, custPage: 0 }),
+      custListLabel: filtered.length + ' shown',
+      custFilterOpts: [
+        { label: 'ALL', val: 'all' }, { label: 'VIP', val: 'VIP' }, { label: 'AT RISK', val: 'AT RISK' }
+      ].map(f => ({
+        label: f.label,
+        onClick: () => this.setState({ custFilter: f.val, custPage: 0 }),
+        style: 'padding:7px 14px;cursor:pointer;font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:.06em;' +
+          (s.custFilter === f.val ? 'background:var(--color-text);color:var(--color-bg)' : 'color:var(--color-neutral-700)')
+      })),
+      custPager,
+      custRows: custPager.rows.map(c => ({
+        ...c,
+        ltv: this.fmt(c.ltvN) + ' FCFA',
+        lastSeen: this.lastSeen[c.id],
+        tagStyle: segTag(c.segment),
+        onClick: () => this.setState({ selCustId: c.id })
+      })),
+      selCust: sel ? { ...sel, ltv: this.fmt(sel.ltvN) + ' FCFA' } : null,
+      noSelCust: !sel,
+      custKpis: [
+        { label: 'Total accounts', value: '84 216', sub: '+1 908 this month' },
+        { label: 'Active (30 d)', value: '52 340', sub: '62% of base' },
+        { label: 'Avg LTV', value: '23 400 FCFA', sub: 'per account' },
+        { label: 'Churn (90 d)', value: '4.7%', sub: '−0.8 pt vs Q1' }
+      ].map((k, i) => ({ ...k, style: 'padding:20px' + (i < 3 ? ';border-right:2px solid var(--color-text)' : '') })),
+      segmentSplit: [
+        { name: 'VIP', pct: 8 }, { name: 'Active', pct: 54 }, { name: 'New', pct: 26 }, { name: 'At risk', pct: 12 }
+      ].map((c, i) => ({
+        ...c, width: c.pct + '%',
+        barColor: i === 0 ? 'var(--color-accent)' : i === 1 ? 'var(--color-accent-300)' : i === 2 ? 'var(--color-neutral-400)' : 'var(--color-neutral-300)'
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { PAYABLE_COUNTRIES } from '@topup/core';
-import { ApiError, apiSend, type Flags as FlagsData } from '../api';
-import { useApi } from '../useApi';
-import { PageHead, SecHead } from '../components/Bits';
-import { TableState } from '../states';
+import { ApiError, apiSend, type Flags as FlagsData } from '../../api';
+import { useApi } from '../../useApi';
+import { SecHead } from '../../components/Bits';
+import { TableState } from '../../states';
 
 /**
  * Per-market feature switches.
@@ -25,7 +25,7 @@ type Cell = 'default' | 'on' | 'off';
 const nextState = (current: Cell): Cell =>
   current === 'default' ? 'on' : current === 'on' ? 'off' : 'default';
 
-export default function Flags() {
+export default function Features() {
   const flags = useApi<FlagsData>('/admin/features', {});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,10 +69,8 @@ export default function Flags() {
 
   return (
     <>
-      <PageHead kicker="Operations" title="Feature switches" />
-
       <SecHead
-        title="By market"
+        title="Feature switches"
         right={<span className="count">click a cell: default → on → off</span>}
       />
 

@@ -6,7 +6,7 @@ import Orders from './views/Orders';
 import Customers from './views/Customers';
 import Vpn from './views/Vpn';
 import Catalogue from './views/Catalogue';
-import Flags from './views/Flags';
+import Settings from './views/Settings';
 
 const VIEWS = [
   { id: 'dashboard', label: 'Dashboard', View: Dashboard },
@@ -14,7 +14,7 @@ const VIEWS = [
   { id: 'customers', label: 'Customers', View: Customers },
   { id: 'vpn', label: 'VPN', View: Vpn },
   { id: 'catalogue', label: 'Catalog', View: Catalogue },
-  { id: 'flags', label: 'Switches', View: Flags },
+  { id: 'settings', label: 'Settings', View: Settings },
 ] as const;
 
 type ViewId = (typeof VIEWS)[number]['id'];

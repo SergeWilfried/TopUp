@@ -62,7 +62,11 @@ export const apiGet = async <T>(path: string, params?: Params, signal?: AbortSig
     await fetch(`${BASE}${path}${qs(params)}`, { signal, cache: 'no-store', headers: authHeader() }),
   )) as T;
 
-export const apiSend = async <T>(method: 'POST' | 'PATCH' | 'PUT', path: string, body: unknown): Promise<T> =>
+export const apiSend = async <T>(
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+  path: string,
+  body: unknown,
+): Promise<T> =>
   (await parse(
     await fetch(`${BASE}${path}`, {
       method,
@@ -88,6 +92,12 @@ export type Stats = {
   orders7: number;
   pending: number;
   refunded: number;
+  /** Money taken and nothing delivered — a refund is owed. */
+  deliveryFailed: number;
+  /** Outcome never established. Waits for a person; never auto-retried. */
+  deliveryUnknown: number;
+  /** Paid over an hour ago and still moving. Stuck, not in flight. */
+  stalled: number;
   customers: number;
   avgOrder: number;
   failureRate: number;
@@ -117,7 +127,78 @@ export type RailBalance = {
   covers?: number | null;
 };
 
-export type OrderStatus = 'delivered' | 'pending' | 'failed' | 'refunded';
+/**
+ * Every status the worker can actually write — not a friendlier subset of them.
+ *
+ * The four-value version of this type was a quiet outage: `delivery_failed` and
+ * `delivery_unknown` fell through the tone map and rendered as `tag undefined`,
+ * and the status filter offered no way to list them. Those are exactly the two
+ * states the delivery machine leaves for a human — `delivery_unknown` is never
+ * auto-retried on purpose, because retrying a top-up that may already have
+ * landed pays for it twice — so being unable to see them made the queue that
+ * needs an operator the one thing an operator could not find.
+ */
+/** A console account, and whether it has ever managed to sign in. */
+export type StaffRow = {
+  id: string;
+  email: string | null;
+  msisdn: string | null;
+  createdAt: number;
+  sessions: number;
+  lastSignIn: number | null;
+  /** The account you are signed in as. It may not lock itself out. */
+  isSelf: boolean;
+};
+
+/** Whether the front door works. Booleans only — never a secret's value. */
+export type SecurityState = {
+  channels: { email: boolean; sms: boolean };
+  agentSigningKey: boolean;
+  liveSmsAllowed: boolean;
+  environment: string;
+  staffCount: number;
+  activeSessions: number;
+};
+
+/** One currency the payment router can land on, and whether we can price it. */
+export type RateRow = {
+  currency: string;
+  perXof: number | null;
+  /** The human direction: how many FCFA one unit is worth. */
+  xofPerUnit: number | null;
+  pegged: boolean;
+  updatedAt: number | null;
+  ageDays: number | null;
+  status: 'ok' | 'missing' | 'stale';
+  countries: string[];
+  provider: string;
+};
+
+export type RateBook = { rows: RateRow[]; missing: number };
+
+export type OrderStatus =
+  | 'pending'
+  | 'paid'
+  | 'delivering'
+  | 'delivered'
+  | 'failed'
+  | 'delivery_failed'
+  | 'delivery_unknown'
+  | 'refunded';
+
+/** What an operator should read, rather than the column value. */
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  pending: 'PENDING',
+  paid: 'PAID',
+  delivering: 'DELIVERING',
+  delivered: 'DELIVERED',
+  failed: 'PAYMENT FAILED',
+  // Money taken, nothing given: this one owes a refund.
+  delivery_failed: 'REFUND DUE',
+  // We do not know whether it landed. Needs a person, never a retry.
+  delivery_unknown: 'NEEDS CHECKING',
+  refunded: 'REFUNDED',
+};
 export type ProductType = 'airtime' | 'data' | 'esim' | 'vpn';
 
 export type Order = {

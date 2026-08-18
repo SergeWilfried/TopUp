@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ORDER_STATUS_LABEL } from '../api';
 import type { OrderStatus, SubStatus } from '../api';
 
 export const PageHead = ({ kicker, title, right }: { kicker: string; title: string; right?: ReactNode }) => (
@@ -44,10 +45,13 @@ export const Seg = <T extends string>({
   options,
   value,
   onChange,
+  label,
 }: {
   options: readonly T[];
   value: T;
   onChange: (v: T) => void;
+  /** Optional display text. Column values like `delivery_unknown` are not it. */
+  label?: (v: T) => string;
 }) => (
   <div className="seg">
     {options.map((o) => (
@@ -60,7 +64,7 @@ export const Seg = <T extends string>({
         onClick={() => onChange(o)}
         onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onChange(o)}
       >
-        {o}
+        {label ? label(o) : o}
       </div>
     ))}
   </div>
@@ -101,15 +105,29 @@ export const Panel = ({ title, children }: { title?: string; children: ReactNode
   </div>
 );
 
+/**
+ * Three tones, by what the row asks of the reader: settled and needing
+ * nothing, in flight, or waiting on a person. `delivery_failed` and
+ * `delivery_unknown` are the loud ones — both mean money moved and the
+ * customer has not been made whole.
+ */
 const ORDER_TONE: Record<OrderStatus, string> = {
-  delivered: 'tag-neutral',
   pending: 'tag-outline',
+  paid: 'tag-outline',
+  delivering: 'tag-outline',
+  delivered: 'tag-neutral',
   failed: 'tag-accent',
+  delivery_failed: 'tag-accent',
+  delivery_unknown: 'tag-accent',
   refunded: 'tag-neutral',
 };
 
 export const OrderTag = ({ status }: { status: OrderStatus }) => (
-  <span className={`tag ${ORDER_TONE[status]}`}>{status.toUpperCase()}</span>
+  // Falls back rather than rendering `tag undefined`: a status this build has
+  // not learned about yet should still look like a status.
+  <span className={`tag ${ORDER_TONE[status] ?? 'tag-outline'}`}>
+    {ORDER_STATUS_LABEL[status] ?? String(status).replace(/_/g, ' ').toUpperCase()}
+  </span>
 );
 
 const SUB_TONE: Record<SubStatus, string> = {
