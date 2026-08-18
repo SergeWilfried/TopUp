@@ -328,7 +328,7 @@ async function sendOtpEmail(
       method: 'POST',
       headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify({
-        from: 'TOPUP <login@smtp.resend.com>',
+        from: 'TOPUP <no-reply@progiciellabs.xyz>',
         to: email,
         subject: `${code} is your TOPUP code`,
         text: `Your code is ${code}. It expires in 10 minutes.`,
