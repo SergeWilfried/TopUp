@@ -42,10 +42,37 @@ export function dataLabel(gb: string | number): string {
   return `${Number.isInteger(n) ? n : n.toFixed(1)} GB`;
 }
 
+/** The feed marks these by putting a word where a number belongs. */
+export const isUnlimited = (data: string | number) => !Number.isFinite(Number(data));
+
+/**
+ * What "unlimited" actually means on these plans.
+ *
+ * The provider's fair-usage policy throttles to 5 Mbps after the first 500 MB
+ * and to 512 kbps once a cap is reached — 25 GB on a 7-day plan, 40 GB on 15
+ * days, 65 GB on 30. A tile that says only "Unlimited" is selling something
+ * the customer will discover is not, which is a refund and a bad review. So
+ * the limit rides along in the terms, on the tile, before the money moves.
+ */
+export function fairUsageNote(days: number): string {
+  const cap = days >= 30 ? 65 : days >= 15 ? 40 : 25;
+  return `5 Mbps after 500 MB, slower past ${cap} GB`;
+}
+
 export type EsimSyncResult = {
   synced: number;
   disabled: number;
   destinations: Array<{ code: string; name: string; plans: number }>;
+  /**
+   * Why a sync produced nothing, without needing the provider's feed in hand.
+   * A run that fetches 900 plans and writes 0 is indistinguishable from one
+   * that fetched nothing at all unless the misses are counted and named.
+   */
+  fetched?: number;
+  skippedRegional?: number;
+  skippedUnknownDestination?: number;
+  /** ISO codes and country names the feed offered that we do not sell. */
+  sampleUnmatched?: string[];
   error?: string;
 };
 
@@ -55,20 +82,55 @@ export async function syncEsimPlans(env: Env): Promise<EsimSyncResult> {
   ).all<{ code: string; name: string }>();
   const byIso = new Map(dests.map((d) => [d.code.toUpperCase(), d]));
 
+  // Also indexed by name, because matching on `countryIso2` alone is one
+  // spelling away from matching nothing: the field is empty on some feed rows
+  // and the country name is the only other thing a plan is sure to carry.
+  const byName = new Map(dests.map((d) => [d.name.trim().toLowerCase(), d]));
+
   const res = await fetchPlans(env);
-  if (!res.ok) return { synced: 0, disabled: 0, destinations: [], error: res.error };
+  if (!res.ok) {
+    // Logged, not merely returned: the scheduled run discards the result, so
+    // a silent error path is a sync that fails every fifteen minutes with
+    // nothing to show for it.
+    console.error(`[esim] plan fetch failed: ${res.error}`);
+    return { synced: 0, disabled: 0, destinations: [], fetched: 0, error: res.error };
+  }
 
   const margin = marginPct(env);
   const seen = new Set<string>();
   const perDest = new Map<string, number>();
   let synced = 0;
+  let skippedRegional = 0;
+  let skippedUnknown = 0;
+  const unmatched = new Set<string>();
+  const all = (res.data ?? []) as YesimPlan[];
 
-  for (const p of res.data as YesimPlan[]) {
-    // Single-country plans only: a regional plan names no operator we can put
-    // on a destination tile, and the shop is organised by country.
-    if (p.plan_type && p.plan_type !== 'country') continue;
-    const dest = byIso.get(String(p.countryIso2 ?? '').toUpperCase());
-    if (!dest) continue;
+  for (const p of all) {
+    /**
+     * Single-country plans only — but decided from the data, not a label.
+     *
+     * This used to test `plan_type !== 'country'`, a string taken from one
+     * example in the documentation; any other spelling the feed happens to
+     * use ('Country', 'local', blank) silently discarded the entire
+     * catalogue. What actually makes a plan regional is that it covers more
+     * than one country, and `countries_included` says so plainly.
+     */
+    const covers = String(p.countries_included ?? '')
+      .split(/[,;/]/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (covers.length > 1) { skippedRegional++; continue; }
+
+    const dest =
+      byIso.get(String(p.countryIso2 ?? '').trim().toUpperCase()) ??
+      byName.get(covers[0]?.toLowerCase() ?? '') ??
+      null;
+    if (!dest) {
+      skippedUnknown++;
+      const label = `${String(p.countryIso2 ?? '?').trim()}:${covers[0] ?? p.name ?? '?'}`;
+      if (unmatched.size < 12) unmatched.add(label);
+      continue;
+    }
 
     const priceEur = Number(p.price);
     const days = Number(p.days);
@@ -77,11 +139,18 @@ export async function syncEsimPlans(env: Env): Promise<EsimSyncResult> {
     const id = `yesim-${p.id}`;
     seen.add(String(p.id));
     const price = xofPriceForEur(priceEur, margin);
+    const validity = Number.isFinite(days) && days > 0 ? `Valid ${days} day${days === 1 ? '' : 's'}` : null;
+    const unlimited = isUnlimited(p.data);
     // "Vodafone Albania · Valid 7 days" — the operator is what an eSIM is sold
-    // on, and the validity is what tells two same-size plans apart.
-    const terms = [p.operators, Number.isFinite(days) && days > 0 ? `Valid ${days} day${days === 1 ? '' : 's'}` : null]
+    // on, and the validity is what tells two same-size plans apart. An
+    // unlimited plan carries its throttle here too, because that is the part
+    // the word "unlimited" hides.
+    const terms = [p.operators, validity, unlimited && Number.isFinite(days) ? fairUsageNote(days) : null]
       .filter(Boolean)
       .join(' · ');
+    // Three tiles all called "Unlimited" are indistinguishable on a shelf;
+    // the validity is what separates them, so it belongs in the name.
+    const name = unlimited && validity ? `Unlimited · ${days} days` : dataLabel(p.data);
 
     await env.DB.prepare(
       `INSERT INTO products (id, type, name, name_key, country, network, terms, terms_key, terms_params,
@@ -100,7 +169,7 @@ export async function syncEsimPlans(env: Env): Promise<EsimSyncResult> {
     )
       .bind(
         id,
-        dataLabel(p.data),
+        name,
         dest.name, // products.country is the display name the app queries by
         p.operators || null,
         terms,
@@ -129,6 +198,18 @@ export async function syncEsimPlans(env: Env): Promise<EsimSyncResult> {
     : { meta: { changes: 0 } };
 
   const destinations = dests.map((d) => ({ code: d.code, name: d.name, plans: perDest.get(d.code) ?? 0 }));
-  console.log(`[esim] ${synced} plans synced, ${stale.meta.changes} disabled at ${now()}`);
-  return { synced, disabled: stale.meta.changes ?? 0, destinations };
+  console.log(
+    `[esim] fetched ${all.length}, synced ${synced}, disabled ${stale.meta.changes ?? 0}, ` +
+      `skipped ${skippedRegional} regional / ${skippedUnknown} other destinations` +
+      (synced === 0 && unmatched.size ? ` — feed offered: ${[...unmatched].join(', ')}` : ''),
+  );
+  return {
+    synced,
+    disabled: stale.meta.changes ?? 0,
+    destinations,
+    fetched: all.length,
+    skippedRegional,
+    skippedUnknownDestination: skippedUnknown,
+    sampleUnmatched: [...unmatched],
+  };
 }

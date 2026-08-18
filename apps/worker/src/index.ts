@@ -67,7 +67,7 @@ export default {
    * receive twice and we pay for twice, so anything still unresolved stays put
    * for a human rather than being guessed at on a schedule.
    */
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(sweep(env).catch((e) => console.error(`sweep failed: ${(e as Error).message}`)));
     ctx.waitUntil(
       reconcileDeliveries(env).catch((e) =>
@@ -81,12 +81,23 @@ export default {
         .then(({ syncDataBundles }) => syncDataBundles(env, 'BF', 'Burkina Faso'))
         .catch((e) => console.error(`bundle sync failed: ${(e as Error).message}`)),
     );
-    // eSIM plans reprice in EUR at the provider's discretion; refreshed on the
-    // same cadence so the shop never quotes a plan Yesim no longer sells.
-    ctx.waitUntil(
-      import('./delivery/esim-plans')
-        .then(({ syncEsimPlans }) => syncEsimPlans(env))
-        .catch((e) => console.error(`esim sync failed: ${(e as Error).message}`)),
-    );
+    /**
+     * eSIM plans, once a day rather than every fifteen minutes.
+     *
+     * The cron fires 96 times a day. The plan catalogue is ~1 500 rows and
+     * 700 KB, repriced by the provider maybe weekly, and it answers slower the
+     * harder it is asked — consecutive calls measured 2.4 s, 9.1 s, 25.6 s.
+     * Polling it every quarter of an hour bought nothing and was almost
+     * certainly what pushed it into timing out. One window a day is plenty;
+     * `POST /admin/esim/sync` is there for when it cannot wait.
+     */
+    const hour = new Date(event.scheduledTime).getUTCHours();
+    if (hour === 3) {
+      ctx.waitUntil(
+        import('./delivery/esim-plans')
+          .then(({ syncEsimPlans }) => syncEsimPlans(env))
+          .catch((e) => console.error(`esim sync failed: ${(e as Error).message}`)),
+      );
+    }
   },
 };

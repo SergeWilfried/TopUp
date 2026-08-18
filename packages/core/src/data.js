@@ -103,6 +103,16 @@ export const airtimePacks = (t) =>
  * product this market would buy.
  */
 export const ESIM_DESTINATIONS = [
+  // Pilgrimage and trade first: Hajj and Umrah are a fixed season with an
+  // identifiable cohort, and Dubai is the buying trip.
+  { name: 'Saudi Arabia', code: 'SA', coverageKey: 'esim.travel', kind: 'travel' },
+  { name: 'United Arab Emirates', code: 'AE', coverageKey: 'esim.travel', kind: 'travel' },
+  // Diaspora, students, medical.
+  { name: 'France', code: 'FR', coverageKey: 'esim.travel', kind: 'travel' },
+  { name: 'Spain', code: 'ES', coverageKey: 'esim.travel', kind: 'travel' },
+  { name: 'Germany', code: 'DE', coverageKey: 'esim.travel', kind: 'travel' },
+  { name: 'Luxembourg', code: 'LU', coverageKey: 'esim.travel', kind: 'travel' },
+  // Trade, study and diaspora further afield.
   { name: 'China', code: 'CN', coverageKey: 'esim.travel', kind: 'travel' },
   { name: 'Turkey', code: 'TR', coverageKey: 'esim.travel', kind: 'travel' },
   { name: 'India', code: 'IN', coverageKey: 'esim.travel', kind: 'travel' },

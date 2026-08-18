@@ -78,6 +78,7 @@ async function call<T>(
   path: string,
   params: Record<string, string | number | undefined> = {},
   body?: unknown,
+  timeoutMs = 20_000,
 ): Promise<Result<T>> {
   if (!yesimConfigured(env)) return { ok: false, error: 'not_configured' };
   const url = new URL(`${base(env)}${path}`);
@@ -90,7 +91,7 @@ async function call<T>(
       method,
       headers: body ? { 'content-type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e) {
     // Do not include the URL: it carries the token.
@@ -112,8 +113,24 @@ async function call<T>(
 
 // ── endpoints ───────────────────────────────────────────────────────────────
 
-/** GET /plans — the whole sellable catalogue. */
-export const fetchPlans = (env: Env) => call<YesimPlan[]>(env, 'GET', '/plans');
+/**
+ * GET /plans — the whole sellable catalogue.
+ *
+ * Around 1 500 plans and 700 KB, and the provider serves it slowly and very
+ * unevenly: measured at 2.4 s, 9.1 s and 25.6 s on three consecutive calls.
+ * The 20-second default aborted the third of those, and an abort here is
+ * indistinguishable from an outage — which is how this ran for weeks writing
+ * nothing. Ninety seconds, and one retry, because the cost of waiting is a
+ * slow cron and the cost of giving up is an empty shop.
+ */
+export async function fetchPlans(env: Env): Promise<Result<YesimPlan[]>> {
+  const first = await call<YesimPlan[]>(env, 'GET', '/plans', {}, undefined, 90_000);
+  if (first.ok || first.status !== undefined) return first;
+  // No status means the request never completed — a timeout or a dropped
+  // connection. That is the case worth one more try; a 4xx is not.
+  console.warn(`[yesim] /plans did not complete (${first.error}) — retrying once`);
+  return call<YesimPlan[]>(env, 'GET', '/plans', {}, undefined, 90_000);
+}
 
 /** GET /new_esim — issues one profile; `userId` optionally assigns it. */
 export const newEsim = (env: Env, userId?: string) =>
