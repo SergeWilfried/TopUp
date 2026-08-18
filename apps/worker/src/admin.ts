@@ -399,6 +399,19 @@ admin.post('/bundles/sync', async (c) => {
 });
 
 /**
+ * Prepaid balance on every delivery rail, in one call.
+ *
+ * Both rails are prepaid, so this is the pair of numbers that decides whether
+ * tomorrow's orders can be delivered at all. Always 200: a rail that is down or
+ * unconfigured says so in its own row rather than blanking the panel, because
+ * an operator needs to know *which* rail is dry.
+ */
+admin.get('/balances', async (c) => {
+  const { providerBalances } = await import('./delivery/balances');
+  return c.json(await providerBalances(c.env));
+});
+
+/**
  * Remaining airtime float at the distributor, per country.
  *
  * Airtime distribution fails first by running out of money rather than by

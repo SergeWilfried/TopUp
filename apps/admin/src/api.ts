@@ -97,6 +97,26 @@ export type Stats = {
   revenueSeries: number[];
 };
 
+/**
+ * Prepaid balance on a delivery rail.
+ *
+ * Both rails are prepaid, so these are the numbers that say whether tomorrow's
+ * orders can be delivered. Every rail carries its own status: one being down
+ * must not hide another being healthy.
+ */
+export type RailBalance = {
+  rail: 'lafricamobile' | 'yesim';
+  label: string;
+  status: 'ok' | 'not_configured' | 'error';
+  error?: string;
+  balances?: { country: string; balance: number }[];
+  amount?: number;
+  currency?: string;
+  xof?: number;
+  /** Roughly how many more sales the wallet covers at current prices. */
+  covers?: number | null;
+};
+
 export type OrderStatus = 'delivered' | 'pending' | 'failed' | 'refunded';
 export type ProductType = 'airtime' | 'data' | 'esim' | 'vpn';
 

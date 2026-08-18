@@ -1,6 +1,6 @@
 import { fmt, fmtN } from '@topup/core';
 import { formatMsisdn } from '../api';
-import type { OrderPage, Stats } from '../api';
+import type { OrderPage, RailBalance, Stats } from '../api';
 import { useApi } from '../useApi';
 import { KpiStrip, OrderTag, PageHead, Panel, SecHead } from '../components/Bits';
 import { Loaded, TableState } from '../states';
@@ -11,6 +11,7 @@ const time = (ms: number) =>
 export default function Dashboard() {
   const stats = useApi<Stats>('/admin/stats');
   const recent = useApi<OrderPage>('/admin/orders', { perPage: 10, sort: 'date', order: 'desc' });
+  const float = useApi<{ rails: RailBalance[] }>('/admin/balances');
 
   const s = stats.data;
   const peak = Math.max(...(s?.revenueSeries ?? [0]), 1);
@@ -108,6 +109,50 @@ export default function Dashboard() {
                       <i style={{ width: `${(r.total / topProduct) * 100}%` }} />
                     </span>
                     <span className="val num">{Math.round((r.total / topProduct) * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            </Loaded>
+          </Panel>
+
+          {/* First in the stack on purpose. Distribution does not fail by
+              breaking, it fails by running out of money: the APIs stay up, the
+              app keeps taking orders, and every delivery bounces. Both rails
+              are prepaid, so this is the panel that predicts tomorrow. */}
+          <Panel title="Float · delivery rails">
+            <Loaded loading={float.loading} error={float.error} onRetry={float.reload}>
+              <div className="rows" style={{ marginTop: 12 }}>
+                {(float.data?.rails ?? []).map((r) => (
+                  <div key={r.rail}>
+                    <div className="row">
+                      <span className="k">{r.label}</span>
+                      {r.status === 'ok' ? (
+                        <span className="figure num">
+                          {r.currency === 'XOF' || r.currency === undefined
+                            ? fmt(r.amount ?? 0)
+                            : `${(r.amount ?? 0).toFixed(2)} ${r.currency}`}
+                        </span>
+                      ) : (
+                        // An unreachable rail and an unconfigured one are
+                        // different problems: one needs a credential, the other
+                        // needs a phone call. Never collapse them into "—".
+                        <span className={r.status === 'not_configured' ? 'tag tag-neutral' : 'tag tag-accent'}>
+                          {r.status === 'not_configured' ? 'NOT CONFIGURED' : 'UNREACHABLE'}
+                        </span>
+                      )}
+                    </div>
+                    {r.status === 'ok' && r.currency === 'EUR' && (
+                      <p className="note">
+                        ≈ {fmt(r.xof ?? 0)}
+                        {typeof r.covers === 'number' ? ` · covers about ${fmtN(r.covers)} more eSIMs` : ''}
+                      </p>
+                    )}
+                    {r.status === 'ok' && (r.balances?.length ?? 0) > 0 && (
+                      <p className="note">
+                        {r.balances!.map((b) => `${b.country} ${fmt(b.balance)}`).join(' · ')}
+                      </p>
+                    )}
+                    {r.status === 'error' && r.error && <p className="note">{r.error}</p>}
                   </div>
                 ))}
               </div>

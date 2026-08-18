@@ -29,7 +29,7 @@ export function xofPriceForEur(priceEur: number, marginPct: number): number {
   return Math.ceil(raw / 50) * 50;
 }
 
-const marginPct = (env: Env) => {
+export const marginPct = (env: Env) => {
   const n = Number(env.ESIM_MARGIN_PCT);
   return Number.isFinite(n) && n >= 0 ? n : 25;
 };
