@@ -20,7 +20,14 @@ export const FEATURES = {
   airtime: { default: true, label: 'Airtime top-up' },
   data: { default: true, label: 'Data bundles' },
   esim: { default: true, label: 'eSIM' },
-  vpn: { default: true, label: 'VPN' },
+  /**
+   * Parked, not retired. Off by default because nobody holds a subscription
+   * and the corridor that justified it turned out to be one destination rather
+   * than the Hajj volume it was scoped against. The rows, routes and servers
+   * all remain, so switching it back on in a market is one flag rather than a
+   * rebuild.
+   */
+  vpn: { default: false, label: 'VPN' },
   /** Paying by dialling the operator's merchant code. */
   dial: { default: true, label: 'Dial-to-pay (USSD)' },
   /** Paying by approving a push prompt through the PSP. */

@@ -183,6 +183,15 @@ export default {
   },
 
   packs: {
+    validDays_one: 'Valid {{count}} day',
+    validDays_other: 'Valid {{count}} days',
+    group: {
+      internet: 'INTERNET',
+      social: 'SOCIAL APPS',
+      calls: 'CALLS & SMS',
+      international: 'INTERNATIONAL CALLS',
+      socialNote: 'These work only inside the app named — not for browsing or other apps.',
+    },
     step: '02 — CHOOSE A PACK',
     airtimeTitle: 'Airtime',
     dataTitle: 'Data packs',

@@ -183,6 +183,15 @@ export default {
   },
 
   packs: {
+    validDays_one: 'Valable {{count}} jour',
+    validDays_other: 'Valable {{count}} jours',
+    group: {
+      internet: 'INTERNET',
+      social: 'RÉSEAUX SOCIAUX',
+      calls: 'APPELS ET SMS',
+      international: 'APPELS INTERNATIONAUX',
+      socialNote: 'Valables uniquement dans l’application indiquée — pas pour la navigation ni les autres applications.',
+    },
     step: '02 — CHOISIR UN FORFAIT',
     airtimeTitle: 'Crédit',
     dataTitle: 'Forfaits internet',

@@ -2,6 +2,7 @@
 // worker. Nothing in here may import React, React Native or any DOM API.
 export * from './theme';
 export * from './data';
+export * from './bundles';
 export * from './seed';
 export * from './regions';
 export { default as en } from './locales/en';

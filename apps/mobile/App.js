@@ -15,7 +15,7 @@ import './i18n';
 import { loadStoredLanguage } from './i18n';
 
 import { TOURS, TourOverlay, TourProvider, TourTarget, tourFor, tourStoreKey } from './tour';
-import { C, F, fmt, fmtN, airtimeBonusFor, canonicalMsisdn, countryFromCanonical, detect, flagFor, navItems, networksFor, prefixFor, toE164, toNational, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
+import { C, F, fmt, fmtN, airtimeBonusFor, bundleLabel, groupBundles, validityDays, canonicalMsisdn, countryFromCanonical, detect, flagFor, navItems, networksFor, prefixFor, toE164, toNational, PAYABLE_COUNTRIES, TAB_SCREENS, SEEN_ONBOARDING } from '@topup/core';
 import {
   ApiError,
   catalogue as fetchCatalogue,
@@ -111,15 +111,24 @@ const launchCountry = (() => {
  * never by price — the server re-reads the price from its own row, so a stale
  * or tampered client cannot change what is charged.
  */
-const toPack = (p) => ({
-  id: p.id,
-  n: p.name,
-  v: p.terms,
-  p: p.price,
-  b: p.bonus,
-  days: p.days,
-  carrier: p.network,
-});
+const toPack = (p, t) => {
+  // Data bundles arrive as the operator's marketing prose — "Beneficier de 50
+  // Mo de connexion avec une validite de 2 jours" — which is three lines in a
+  // grid cell and says one useful thing. The useful thing is extracted for the
+  // tile; the full text still rides along for the confirmation step, where
+  // there is room to read it.
+  const validity = p.type === 'data' ? validityDays(p.terms) : null;
+  return {
+    id: p.id,
+    n: p.type === 'data' ? bundleLabel(p) : p.name,
+    v: validity && t ? t('packs.validDays', { count: validity }) : p.terms,
+    terms: p.terms,
+    p: p.price,
+    b: p.bonus,
+    days: p.days,
+    carrier: p.network,
+  };
+};
 
 /**
  * A free amount of airtime as the pay step wants it.
@@ -404,7 +413,21 @@ function TopUp() {
   }, [screen]);
 
   /** True unless the market has explicitly switched this off. */
-  const featureOn = React.useCallback((name) => features?.[name] !== false, [features]);
+  /**
+   * True unless the market has explicitly switched this off.
+   *
+   * `vpn` is the exception, and deliberately so. Everything else defaults on so
+   * a slow or failed lookup cannot blank the home screen — the worker refuses
+   * what is off regardless, so an optimistic client is safe. But VPN is parked,
+   * not merely unavailable here, and an optimistic default would put a
+   * withdrawn product back in front of every customer whose /features call
+   * timed out. Off until the server says otherwise is the right way round for
+   * something we are not selling.
+   */
+  const featureOn = React.useCallback(
+    (name) => (features ? features[name] !== false : name !== 'vpn'),
+    [features],
+  );
 
   /**
    * What this market will actually be charged.
@@ -884,10 +907,30 @@ function TopUp() {
   // Airtime and data are a separate SKU on every network, so the catalogue
   // carries one row per carrier. Showing them all put three "150 MB" tiles
   // under an "MTN" heading; the list is the selected network's only.
-  const packs =
-    (service === 'airtime' ? cat?.airtime : cat?.data)
-      ?.filter((p) => !p.network || p.network === carrier)
-      .map(toPack) ?? [];
+  const forCarrier =
+    (service === 'airtime' ? cat?.airtime : cat?.data)?.filter(
+      (p) => !p.network || p.network === carrier,
+    ) ?? [];
+  const packs = forCarrier.map((p) => toPack(p, t));
+
+  /**
+   * Data bundles, split into what they actually are.
+   *
+   * One network returns up to twenty rows and they are not the same kind of
+   * thing: some are ordinary data, some only work inside TikTok, and six of
+   * Orange's are international calling minutes. Flat, they collide — a "4 Go"
+   * at 1 150 F next to a "4 Go" at 3 250 F, where the cheap one will not open
+   * WhatsApp — and the customer picks the wrong one by reading correctly.
+   *
+   * Airtime keeps the plain grid: five amounts need no signposting.
+   */
+  const packSections =
+    service === 'data' && forCarrier.length
+      ? groupBundles(forCarrier).map(({ group, items }) => ({
+          group,
+          items: items.map((p) => toPack(p, t)),
+        }))
+      : null;
   /**
    * Puts the recipient form in its "for myself" state: the account's own line
    * in national form, its country as the delivery country, and its network
@@ -928,7 +971,7 @@ function TopUp() {
   const loadEsimPlans = async (name) => {
     setEsimPlansLoading(true);
     const res = await fetchEsimPlans(name, i18n.language?.slice(0, 2) || 'en').catch(() => null);
-    setEsimPlanList(res ? res.plans.map(toPack) : []);
+    setEsimPlanList(res ? res.plans.map((p) => toPack(p, t)) : []);
     setEsimPlansLoading(false);
   };
   /**
@@ -980,12 +1023,15 @@ function TopUp() {
             <Text style={st.subText}>{t('welcome.trust')}</Text>
             <Btn label={t('welcome.cta')} onPress={() => { setAuthFrom('welcome'); setScreen('login'); }} />
             {/* Reachable without an OTP on purpose: someone on a new phone
-                cannot receive a code on the old SIM. */}
-            <Btn
-              variant="ghost"
-              label={t('welcome.recover')}
-              onPress={() => { setRecoverFrom('welcome'); setScreen('vpnRecover'); }}
-            />
+                cannot receive a code on the old SIM. Hidden with the rest of
+                VPN — there is nothing to recover for a product nobody holds. */}
+            {featureOn('vpn') && (
+              <Btn
+                variant="ghost"
+                label={t('welcome.recover')}
+                onPress={() => { setRecoverFrom('welcome'); setScreen('vpnRecover'); }}
+              />
+            )}
           </View>
         </View>
       )}
@@ -1021,12 +1067,14 @@ function TopUp() {
               </View>
             )}
             <Text style={st.subText}>{t('auth.smsNote')}</Text>
-            <Btn
-              variant="ghost"
-              label={t('auth.recoverCta')}
-              onPress={() => { setRecoverFrom('login'); setScreen('vpnRecover'); }}
-              style={{ alignSelf: 'flex-start' }}
-            />
+            {featureOn('vpn') && (
+              <Btn
+                variant="ghost"
+                label={t('auth.recoverCta')}
+                onPress={() => { setRecoverFrom('login'); setScreen('vpnRecover'); }}
+                style={{ alignSelf: 'flex-start' }}
+              />
+            )}
           </View>
         </View>
       )}
@@ -1094,7 +1142,7 @@ function TopUp() {
           points={points}
           history={history}
           loading={accountLoading}
-          deal={deal ? toPack(deal) : null}
+          deal={deal ? toPack(deal, t) : null}
           lastBuy={lastBuy}
           // Straight to payment: the pack, the line and the wallet are all
           // known, so there is nothing left to ask.
@@ -1112,7 +1160,7 @@ function TopUp() {
             setPhone(lastBuy.recipient);
             setRecipientCountry(lastBuy.recipientCountry);
             if (lastBuy.methodId) setPay(lastBuy.methodId);
-            setPack(lastBuy.customAmount ? customPack(lastBuy.customAmount, t) : toPack(p));
+            setPack(lastBuy.customAmount ? customPack(lastBuy.customAmount, t) : toPack(p, t));
             setPayError(null);
             setScreen('pay');
           }}
@@ -1123,7 +1171,7 @@ function TopUp() {
           onDailyDeal={() => {
             if (!deal) return;
             setService('data');
-            setPack(toPack(deal));
+            setPack(toPack(deal, t));
             setScreen('pay');
           }}
           onVpn={() => setScreen(vpn ? 'vpn' : 'vpnPlans')}
@@ -1234,16 +1282,30 @@ function TopUp() {
               <ProviderBadge network={carrier} country={recipientCountry} />
             </View>
             <Toggle2 opts={[{ label: t('packs.airtimeToggle'), val: 'airtime' }, { label: t('packs.dataToggle'), val: 'data' }]} value={service} onChange={setService} />
-            <PackGrid
-              items={packs}
-              onSelect={openPack}
-              loading={cat === null && !catFailed}
-              art={catFailed ? Offline : undefined}
-              title={catFailed ? t('empty.offlineTitle') : t('empty.packsTitle')}
-              body={catFailed ? t('empty.offlineBody') : t('empty.packsBody')}
-              cta={catFailed ? t('empty.retry') : null}
-              onCta={catFailed ? reloadCatalogue : null}
-            />
+            {packSections ? (
+              packSections.map(({ group, items }) => (
+                <View key={group} style={{ gap: 10 }}>
+                  <Kicker>{t(`packs.group.${group}`)}</Kicker>
+                  {/* Only the scoped section carries a caption, and it is the
+                      one that needs it: these bundles look like ordinary data
+                      and are not, which is exactly the mistake this screen
+                      used to invite. */}
+                  {group === 'social' && <Text style={st.subText}>{t('packs.group.socialNote')}</Text>}
+                  <PackGrid items={items} onSelect={openPack} />
+                </View>
+              ))
+            ) : (
+              <PackGrid
+                items={packs}
+                onSelect={openPack}
+                loading={cat === null && !catFailed}
+                art={catFailed ? Offline : undefined}
+                title={catFailed ? t('empty.offlineTitle') : t('empty.packsTitle')}
+                body={catFailed ? t('empty.offlineBody') : t('empty.packsBody')}
+                cta={catFailed ? t('empty.retry') : null}
+                onCta={catFailed ? reloadCatalogue : null}
+              />
+            )}
             {service === 'airtime' && featureOn('customAmount') && (
               <Pressable
                 onPress={() => setScreen('amount')}
@@ -1267,7 +1329,7 @@ function TopUp() {
 
       {screen === 'vpnPlans' && (
         <VpnPlansScreen
-          plans={(cat?.vpn ?? []).map(toPack)}
+          plans={(cat?.vpn ?? []).map((p) => toPack(p, t))}
           locations={locations}
           onBack={() => setScreen(vpn ? 'vpn' : 'home')}
           onRestore={() => { setRecoverFrom('vpnPlans'); setScreen('vpnRecover'); }}
