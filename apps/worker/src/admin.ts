@@ -398,6 +398,41 @@ admin.post('/bundles/sync', async (c) => {
   return c.json(await syncDataBundles(c.env, country, name));
 });
 
+// ── order actions ───────────────────────────────────────────────────────────
+
+/**
+ * Asks the provider what became of one order, on demand.
+ *
+ * The reconciliation sweep does this on its own schedule; the operator looking
+ * at a stuck order in the console wants the answer now. It only ever *asks* —
+ * an ambiguous top-up that gets re-sent is one the customer may receive twice
+ * and we pay for twice, so there is no retry here and there should never be.
+ */
+admin.post('/orders/:id/recheck', async (c) => {
+  const { recheckOrder } = await import('./delivery');
+  const result = await recheckOrder(c.env, c.req.param('id'));
+  const staff = c.get('staff');
+  console.log(`[audit] recheck ${result.orderId} → ${result.status} by ${staff?.email ?? staff?.id}`);
+  return c.json(result, result.status === 'not_checkable' && result.reason === 'not_found' ? 404 : 200);
+});
+
+/**
+ * Closes an order that was never paid for.
+ *
+ * Refused outright if any payment on it was captured, so this can only ever
+ * clear rows where no money moved.
+ */
+admin.post('/orders/:id/expire', async (c) => {
+  const { expireOrder } = await import('./commerce');
+  const result = await expireOrder(c.env, c.req.param('id'));
+  const staff = c.get('staff');
+  if (!result.ok) {
+    return c.json({ error: result.error }, result.error === 'not_found' ? 404 : 409);
+  }
+  console.log(`[audit] expired ${c.req.param('id')} by ${staff?.email ?? staff?.id}`);
+  return c.json({ ok: true, id: c.req.param('id') });
+});
+
 // ── team & security ─────────────────────────────────────────────────────────
 
 /** Who has console access, and whether they have ever managed to use it. */

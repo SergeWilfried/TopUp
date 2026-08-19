@@ -1,8 +1,14 @@
+import { useState } from 'react';
 import { fmt, fmtDate } from '@topup/core';
-import { providerLabel, type OrderDetail as Detail , formatMsisdn } from '../api';
+import { ApiError, apiSend, providerLabel, type OrderDetail as Detail , formatMsisdn } from '../api';
 import { useApi } from '../useApi';
 import { OrderTag, Panel } from '../components/Bits';
 import { Loaded } from '../states';
+
+/** Only the two states the delivery sweep owns can be asked about. */
+const canRecheck = (status: string) => status === 'delivering' || status === 'delivery_unknown';
+/** Only an order that never took money can be closed. */
+const canExpire = (status: string) => status === 'pending';
 
 const time = (ms: number) =>
   new Date(ms).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -17,6 +23,36 @@ export default function OrderDetail({
   onOpenCustomer: (customerId: string) => void;
 }) {
   const { data: d, loading, error, reload } = useApi<Detail>(`/admin/orders/${encodeURIComponent(id)}`);
+  const [busy, setBusy] = useState<'recheck' | 'expire' | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const act = async (what: 'recheck' | 'expire') => {
+    setBusy(what);
+    setNote(null);
+    try {
+      const r = await apiSend<{ status?: string; reason?: string }>(
+        'POST',
+        `/admin/orders/${encodeURIComponent(id)}/${what}`,
+        {},
+      );
+      // Recheck is honest about a non-answer: the provider may simply still
+      // not know, and reporting that is more useful than a silent refresh.
+      setNote(
+        what === 'expire'
+          ? 'Closed.'
+          : r.status === 'resolved'
+            ? 'Provider answered — status updated.'
+            : r.status === 'still_unknown'
+              ? `Provider still cannot say (${r.reason ?? 'no reason given'}).`
+              : `Cannot check: ${r.reason ?? 'unknown'}`,
+      );
+      reload();
+    } catch (e) {
+      setNote(e instanceof ApiError ? e.code : 'network_error');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <Panel>
@@ -52,6 +88,31 @@ export default function OrderDetail({
                 <OrderTag status={d.status} />
               </div>
             </div>
+
+            {/* The two things an operator can do to a stuck order, and only
+                where they mean something. Neither re-sends anything: recheck
+                asks the provider what happened, expire closes a row where no
+                money ever moved. */}
+            {(canRecheck(d.status) || canExpire(d.status)) && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                {canRecheck(d.status) && (
+                  <button className="btn" type="button" disabled={busy !== null} onClick={() => act('recheck')}>
+                    {busy === 'recheck' ? 'ASKING…' : 'RECHECK WITH PROVIDER'}
+                  </button>
+                )}
+                {canExpire(d.status) && (
+                  <button
+                    className="btn btn-ghost"
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => confirm('Close this order as never paid?') && act('expire')}
+                  >
+                    {busy === 'expire' ? 'CLOSING…' : 'CLOSE AS UNPAID'}
+                  </button>
+                )}
+                {note && <span className="count">{note}</span>}
+              </div>
+            )}
 
             <h4>Progress</h4>
             <ol className="timeline">

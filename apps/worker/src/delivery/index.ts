@@ -201,24 +201,76 @@ export async function reconcileDeliveries(env: Env, limit = 50): Promise<number>
 
   let resolved = 0;
   for (const row of results) {
-    const provider = row.delivery_provider ? providerByName(row.delivery_provider) : null;
-    if (!provider?.check) continue;
-    try {
-      const outcome = await provider.check(row.delivery_ref);
-      if (outcome.status === 'pending' || outcome.status === 'unknown') {
-        // Touch the timestamp so one stuck order cannot monopolise the sweep.
-        await env.DB.prepare(`UPDATE orders SET delivery_checked_at = ? WHERE id = ?`)
-          .bind(now(), row.id)
-          .run();
-        continue;
-      }
-      await settle(env, row.id, outcome, provider.name);
-      resolved++;
-    } catch {
-      await env.DB.prepare(`UPDATE orders SET delivery_checked_at = ? WHERE id = ?`)
-        .bind(now(), row.id)
-        .run();
-    }
+    const result = await recheckRow(env, row);
+    if (result.status === 'resolved') resolved++;
   }
   return resolved;
+}
+
+type RecheckRow = { id: string; delivery_provider: string | null; delivery_ref: string };
+
+export type RecheckResult =
+  | { status: 'resolved'; outcome: DeliveryOutcome }
+  | { status: 'still_unknown'; reason: string }
+  | { status: 'not_checkable'; reason: string };
+
+/**
+ * Asks one provider what became of one order. Never re-sends.
+ *
+ * The body of the reconciliation loop, lifted out so an operator can run it
+ * against a single order on demand. That is the whole point: the sweep visits
+ * an ambiguous order on its own schedule, and the person looking at it in the
+ * console wants an answer now.
+ *
+ * Touching `delivery_checked_at` even when nothing resolves is deliberate — it
+ * keeps one permanently stuck order from monopolising the ordered sweep.
+ */
+async function recheckRow(env: Env, row: RecheckRow): Promise<RecheckResult> {
+  const provider = row.delivery_provider ? providerByName(row.delivery_provider) : null;
+  const touch = () =>
+    env.DB.prepare(`UPDATE orders SET delivery_checked_at = ? WHERE id = ?`).bind(now(), row.id).run();
+
+  // A provider with no `check` cannot answer, and guessing is the one thing
+  // this path must never do.
+  if (!provider?.check) {
+    return { status: 'not_checkable', reason: provider ? 'provider_cannot_check' : 'unknown_provider' };
+  }
+
+  try {
+    const outcome = await provider.check(row.delivery_ref);
+    if (outcome.status === 'pending' || outcome.status === 'unknown') {
+      await touch();
+      return { status: 'still_unknown', reason: outcome.status === 'pending' ? 'still_in_flight' : 'provider_unsure' };
+    }
+    await settle(env, row.id, outcome, provider.name);
+    return { status: 'resolved', outcome };
+  } catch (e) {
+    await touch();
+    return { status: 'still_unknown', reason: `unreachable: ${(e as Error).message}` };
+  }
+}
+
+/**
+ * On-demand recheck of one order, for the console.
+ *
+ * Restricted to the two statuses the sweep owns. An order that is still
+ * awaiting payment has nothing for a delivery provider to answer about, and
+ * saying so plainly is better than a silent no-op that reads as a broken
+ * button.
+ */
+export async function recheckOrder(env: Env, orderId: string): Promise<RecheckResult & { orderId: string }> {
+  configureProviders(env);
+  const row = await env.DB.prepare(
+    `SELECT id, status, delivery_provider, delivery_ref FROM orders WHERE id = ?`,
+  )
+    .bind(orderId)
+    .first<RecheckRow & { status: string }>();
+
+  if (!row) return { orderId, status: 'not_checkable', reason: 'not_found' };
+  if (row.status !== 'delivering' && row.status !== 'delivery_unknown') {
+    return { orderId, status: 'not_checkable', reason: `not_in_flight:${row.status}` };
+  }
+  if (!row.delivery_ref) return { orderId, status: 'not_checkable', reason: 'no_delivery_reference' };
+
+  return { orderId, ...(await recheckRow(env, row)) };
 }

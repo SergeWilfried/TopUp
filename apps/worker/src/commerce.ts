@@ -318,6 +318,52 @@ export async function customerDetail(env: Env, id: string) {
 // ── dashboard ──────────────────────────────────────────────────────────────
 const DAY = 86_400_000;
 
+/**
+ * Abandons an order that was never paid for.
+ *
+ * Dial-to-pay leaves an order `pending` until the operator's SMS arrives and
+ * the collector matches it. When the customer never dials — or, as happened
+ * here, the merchant code they were shown was a placeholder — nothing ever
+ * arrives and the row sits open for ever. Production is carrying seven of
+ * these, the oldest more than a week old.
+ *
+ * Guarded on the order still being unpaid, and on no payment having been
+ * captured against it. That guard is the whole safety property: an operator
+ * cannot abandon an order the customer actually paid for, even by racing a
+ * collector report that lands mid-click. No money has moved, so there is
+ * nothing to refund — this only stops the row pretending to be live.
+ */
+export async function expireOrder(
+  env: Env,
+  orderId: string,
+  reason = 'abandoned_unpaid',
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const row = await env.DB.prepare(
+    `SELECT o.status, COALESCE(SUM(CASE WHEN p.status = 'captured' THEN 1 ELSE 0 END), 0) AS captured
+     FROM orders o LEFT JOIN payments p ON p.order_id = o.id
+     WHERE o.id = ? GROUP BY o.id`,
+  )
+    .bind(orderId)
+    .first<{ status: string; captured: number }>();
+
+  if (!row) return { ok: false, error: 'not_found' };
+  if (row.captured > 0) return { ok: false, error: 'payment_captured' };
+  if (row.status !== 'pending') return { ok: false, error: `not_pending:${row.status}` };
+
+  const res = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE orders SET status = 'failed', failure_reason = ? WHERE id = ? AND status = 'pending'`,
+    ).bind(reason, orderId),
+    env.DB.prepare(
+      `UPDATE payments SET status = 'failed' WHERE order_id = ? AND status = 'pending'`,
+    ).bind(orderId),
+  ]);
+
+  // The conditional UPDATE is the real guard; if it changed nothing, another
+  // writer got there first and their answer stands.
+  return (res[0].meta.changes ?? 0) > 0 ? { ok: true } : { ok: false, error: 'already_settled' };
+}
+
 export async function commerceStats(env: Env) {
   const t = now();
   const revenueIn = async (from: number, to: number) =>
