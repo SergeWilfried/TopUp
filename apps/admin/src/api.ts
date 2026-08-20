@@ -138,6 +138,68 @@ export type RailBalance = {
  * landed pays for it twice — so being unable to see them made the queue that
  * needs an operator the one thing an operator could not find.
  */
+/** One SIM on the bench. */
+export type Agent = {
+  id: string;
+  label: string | null;
+  msisdn: string;
+  carrier: string;
+  country: string;
+  active: number;
+  floatBalance: number | null;
+  dailyCap: number | null;
+  dailyCount: number;
+  lastSeen: number | null;
+  inFlight: number;
+};
+
+/** One dispatch attempt, as the SIM detail view shows it. */
+export type DispatchJob = {
+  id: string;
+  orderId: string;
+  msisdn: string;
+  amount: number;
+  status: 'queued' | 'leased' | 'sent' | 'failed' | 'unknown';
+  failureReason: string | null;
+  providerRef: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type AgentDetail = {
+  agent: Agent & { dailyResetAt: number; createdAt: number; scriptVersion: number | null };
+  jobs: DispatchJob[];
+  tally: { sent: number | null; failed: number | null; unknown: number | null };
+};
+
+/** One operator's USSD menu, as data. */
+export type UssdStep = { expect: string; send: string };
+export type UssdScript = {
+  country: string;
+  carrier: string;
+  version: number;
+  entry: string;
+  steps: string;
+  successRe: string | null;
+  updatedAt: number;
+};
+
+/** A market/operator pairing, and whether it has a menu to type. */
+export type DispatchRoute = {
+  country: string;
+  carrier: string;
+  agents: number;
+  activeAgents: number;
+  /** Null means no USSD script published — those SIMs cannot dispatch. */
+  scriptVersion: number | null;
+};
+
+export type Fleet = {
+  agents: Agent[];
+  queue: { queued: number | null; leased: number | null; unknown: number | null };
+  routes: DispatchRoute[];
+};
+
 /** A console account, and whether it has ever managed to sign in. */
 export type StaffRow = {
   id: string;
