@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "app.topup.dispatcher.app-debug-25:/xml_ussd_accessibility.xml.flat",
+        "source": "app.topup.dispatcher.app-main-27:/xml/ussd_accessibility.xml"
+    }
+]

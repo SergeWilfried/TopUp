@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.topup.dispatcher.ScriptRunnerTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-20T13:28:57.905Z" hostname="192.168.11.100" time="0.032">
+  <properties/>
+  <testcase name="walks the menu in order and substitutes" classname="app.topup.dispatcher.ScriptRunnerTest" time="0.013"/>
+  <testcase name="receipt must match both pattern and amount" classname="app.topup.dispatcher.ScriptRunnerTest" time="0.0"/>
+  <testcase name="once committed, ambiguity is unknown" classname="app.topup.dispatcher.ScriptRunnerTest" time="0.0"/>
+  <testcase name="refuses a dialog it did not predict" classname="app.topup.dispatcher.ScriptRunnerTest" time="0.0"/>
+  <testcase name="never types the pin into an unexpected dialog" classname="app.topup.dispatcher.ScriptRunnerTest" time="0.0"/>
+  <testcase name="synthesized ref is stable and distinct" classname="app.topup.dispatcher.ScriptRunnerTest" time="0.016"/>
+  <testcase name="nothing sent yet is a failure, not an unknown" classname="app.topup.dispatcher.ScriptRunnerTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
