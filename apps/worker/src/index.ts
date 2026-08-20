@@ -4,6 +4,7 @@ import { publicCatalogue, esimPlansForCountry } from './catalogue';
 import { translator } from './i18n';
 import admin from './admin';
 import checkout from './checkout/routes';
+import agent from './agent';
 import vpn from './vpn/routes';
 import { sweep } from './vpn/sweep';
 import { reconcileDeliveries } from './delivery';
@@ -98,6 +99,9 @@ app.route('/admin', admin);
 
 // Customer purchases: order + payment, provider handoff, callbacks.
 app.route('/checkout', checkout);
+
+// The phone farm polls here for airtime to dispatch over USSD.
+app.route('/agent', agent);
 
 // Customer-facing VPN control plane — auth, subscription, peers. D1-backed.
 app.route('/', vpn);

@@ -7,6 +7,7 @@ import {
 
 export * from './types';
 import { yesim } from './yesim';
+import { ussdAgent } from './ussd-agent';
 import { lafricamobile } from './lafricamobile';
 import { mockEnabled, mockProvider } from './mock';
 export { checkBalance } from './lafricamobile';
@@ -38,6 +39,12 @@ export function configureProviders(env: Env) {
   // First match wins, so the mock has to precede the real one.
   if (mockEnabled(env) && !providers.some((p) => p.name === 'mock')) {
     providers.unshift(mockProvider(env));
+  }
+  // Before the distributor: when the farm is switched on it should win airtime,
+  // which is the whole point of running it. It declines everything else, so the
+  // distributor still takes data and any market the farm does not serve.
+  if (!providers.some((p) => p.name === 'ussd-agent')) {
+    providers.push(ussdAgent(env));
   }
   if (!providers.some((p) => p.name === 'lafricamobile')) {
     providers.push(lafricamobile(env));
@@ -238,12 +245,24 @@ async function recheckRow(env: Env, row: RecheckRow): Promise<RecheckResult> {
 
   try {
     const outcome = await provider.check(row.delivery_ref);
-    if (outcome.status === 'pending' || outcome.status === 'unknown') {
+
+    // Still moving: leave it alone and let the sweep come back. Touching the
+    // timestamp keeps one slow order from monopolising the ordered queue.
+    if (outcome.status === 'pending') {
       await touch();
-      return { status: 'still_unknown', reason: outcome.status === 'pending' ? 'still_in_flight' : 'provider_unsure' };
+      return { status: 'still_unknown', reason: 'still_in_flight' };
     }
+
+    // "I do not know" is a definite answer and a different one. It has to move
+    // the order to `delivery_unknown` so it surfaces in the queue a human
+    // works — an order left in `delivering` while its provider has given up
+    // waits for a sweep that will never resolve it, and nothing on any screen
+    // says so. This is the common path once the phone farm is running: a
+    // handset that dies mid-menu reaps to exactly this.
     await settle(env, row.id, outcome, provider.name);
-    return { status: 'resolved', outcome };
+    return outcome.status === 'unknown'
+      ? { status: 'still_unknown', reason: outcome.reason || 'provider_unsure' }
+      : { status: 'resolved', outcome };
   } catch (e) {
     await touch();
     return { status: 'still_unknown', reason: `unreachable: ${(e as Error).message}` };

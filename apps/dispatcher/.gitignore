@@ -1,0 +1,12 @@
+# Machine-specific SDK path — every developer's is different.
+local.properties
+
+# Build output and Gradle caches.
+build/
+.gradle/
+*.apk
+*.aab
+
+.idea/
+*.iml
+.DS_Store

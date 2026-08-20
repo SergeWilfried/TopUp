@@ -44,6 +44,16 @@ export type Env = {
   SERVICE_FEE_PCT?: string;
   /** '1' stands a fake distributor in until real credentials work. */
   MOCK_DELIVERY?: string;
+  /**
+   * Who sends airtime: 'agent' routes it to the phone farm, anything else
+   * leaves it with the distributor.
+   *
+   * A flag rather than registration order, because this is a commercial
+   * choice — the farm pays 7% against the distributor's 2% — and it should be
+   * switchable without a deploy or a reading of which provider happens to be
+   * pushed first.
+   */
+  AIRTIME_PROVIDER?: string;
   // Yesim Partner API — eSIM issuing and plans. Token travels as a query
   // parameter, so no built URL may be logged.
   YESIM_TOKEN?: string;

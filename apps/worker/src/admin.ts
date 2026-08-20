@@ -26,7 +26,7 @@ import {
   type SubscriptionRow,
 } from './vpn/console';
 import { ParamError, byNumber, byText, listQuery } from './query';
-import type { Env } from './env';
+import { now, randHex, sha256, type Env } from './env';
 import { currentUser, isStaff, type User } from './vpn/auth';
 
 import { ANY_COUNTRY, isFeature, listFlags, setFlag } from './features';
@@ -396,6 +396,198 @@ admin.post('/bundles/sync', async (c) => {
   const country = (c.req.query('country') ?? 'BF').toUpperCase();
   const name = c.req.query('name') ?? 'Burkina Faso';
   return c.json(await syncDataBundles(c.env, country, name));
+});
+
+// ── phone farm ──────────────────────────────────────────────────────────────
+
+/** Every SIM in the farm, with what it is holding and when it last spoke. */
+admin.get('/agents', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT a.id, a.label, a.msisdn, a.carrier, a.country, a.active, a.float_balance AS floatBalance,
+            a.daily_cap AS dailyCap, a.daily_count AS dailyCount, a.last_seen AS lastSeen,
+            (SELECT COUNT(*) FROM delivery_jobs j WHERE j.agent_id = a.id AND j.status = 'leased') AS inFlight
+     FROM agents a ORDER BY a.country, a.carrier, a.created_at`,
+  ).all();
+
+  const queue = await c.env.DB.prepare(
+    `SELECT SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+            SUM(CASE WHEN status = 'leased' THEN 1 ELSE 0 END) AS leased,
+            SUM(CASE WHEN status = 'unknown' THEN 1 ELSE 0 END) AS unknown
+     FROM delivery_jobs`,
+  ).first();
+
+  /**
+   * Routes, and whether each one can actually dispatch.
+   *
+   * A SIM enrolled for a market with no published menu is a device that will
+   * poll forever and never send anything — `/agent/script` 404s and the loop
+   * declines the work. That is invisible from the agent list alone, so the
+   * pairing is computed here: every route someone enrolled a SIM for, against
+   * the script that route does or does not have.
+   */
+  const { results: routes } = await c.env.DB.prepare(
+    `SELECT a.country, a.carrier, COUNT(*) AS agents,
+            SUM(CASE WHEN a.active = 1 THEN 1 ELSE 0 END) AS activeAgents,
+            s.version AS scriptVersion
+     FROM agents a
+     LEFT JOIN ussd_scripts s ON s.country = a.country AND s.carrier = a.carrier
+     GROUP BY a.country, a.carrier
+     ORDER BY a.country, a.carrier`,
+  ).all();
+
+  return c.json({ agents: results, queue, routes });
+});
+
+/**
+ * One SIM, with what it has actually been doing.
+ *
+ * The fleet list answers "is anything wrong"; this answers "wrong how". A SIM
+ * that stopped dispatching looks identical from the outside whether it ran out
+ * of float, hit its cap, lost its script, or has been failing every job for an
+ * hour — and only the last of those is urgent.
+ */
+admin.get('/agents/:id', async (c) => {
+  const agent = await c.env.DB.prepare(
+    `SELECT a.id, a.label, a.msisdn, a.carrier, a.country, a.active,
+            a.float_balance AS floatBalance, a.daily_cap AS dailyCap, a.daily_count AS dailyCount,
+            a.daily_reset_at AS dailyResetAt, a.last_seen AS lastSeen, a.created_at AS createdAt,
+            s.version AS scriptVersion
+     FROM agents a
+     LEFT JOIN ussd_scripts s ON s.country = a.country AND s.carrier = a.carrier
+     WHERE a.id = ?`,
+  )
+    .bind(c.req.param('id'))
+    .first();
+  if (!agent) return c.json({ error: 'not_found' }, 404);
+
+  const { results: jobs } = await c.env.DB.prepare(
+    `SELECT id, order_id AS orderId, msisdn, amount, status, failure_reason AS failureReason,
+            provider_ref AS providerRef, created_at AS createdAt, updated_at AS updatedAt
+     FROM delivery_jobs WHERE agent_id = ? ORDER BY created_at DESC LIMIT 20`,
+  )
+    .bind(c.req.param('id'))
+    .all();
+
+  const tally = await c.env.DB.prepare(
+    `SELECT SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+            SUM(CASE WHEN status = 'unknown' THEN 1 ELSE 0 END) AS unknown
+     FROM delivery_jobs WHERE agent_id = ?`,
+  )
+    .bind(c.req.param('id'))
+    .first();
+
+  return c.json({ agent, jobs, tally });
+});
+
+/**
+ * Enrols a SIM and returns its token once.
+ *
+ * The token is shown here and never again — only its hash is stored, the same
+ * as a session. Losing it means enrolling the device again, which is the
+ * correct trade for a credential that can spend your float.
+ */
+admin.post('/agents', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    msisdn?: string; carrier?: string; country?: string; label?: string; dailyCap?: number;
+  };
+  const msisdn = String(body.msisdn ?? '').replace(/\D/g, '');
+  const carrier = String(body.carrier ?? '').trim();
+  const country = String(body.country ?? '').trim().toUpperCase();
+  if (!msisdn || !carrier || country.length !== 2) {
+    return c.json({ error: 'msisdn_carrier_and_country_required' }, 400);
+  }
+
+  const token = `agt_${randHex(24)}`;
+  const id = `agent_${randHex(6)}`;
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO agents (id, label, msisdn, carrier, country, token_hash, daily_cap, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(id, body.label ?? null, msisdn, carrier, country,
+            await sha256(token), Number.isFinite(body.dailyCap) ? Number(body.dailyCap) : null, now())
+      .run();
+  } catch {
+    return c.json({ error: 'msisdn_already_enrolled' }, 409);
+  }
+
+  const staff = c.get('staff');
+  console.log(`[audit] agent ${id} (${carrier}/${country}) enrolled by ${staff?.email ?? staff?.id}`);
+  return c.json({ id, token }, 201);
+});
+
+/** Retires a SIM. Jobs it already holds run their course or expire to unknown. */
+admin.post('/agents/:id/disable', async (c) => {
+  const res = await c.env.DB.prepare(`UPDATE agents SET active = 0 WHERE id = ?`)
+    .bind(c.req.param('id'))
+    .run();
+  if ((res.meta.changes ?? 0) === 0) return c.json({ error: 'not_found' }, 404);
+  const staff = c.get('staff');
+  console.log(`[audit] agent ${c.req.param('id')} disabled by ${staff?.email ?? staff?.id}`);
+  return c.json({ ok: true });
+});
+
+/** The USSD menus, one row per market and operator. */
+admin.get('/scripts', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT country, carrier, version, entry, steps, success_re AS successRe, updated_at AS updatedAt
+     FROM ussd_scripts ORDER BY country, carrier`,
+  ).all();
+  return c.json({ scripts: results });
+});
+
+/**
+ * Publishes a menu for one route, bumping its version.
+ *
+ * Validated here rather than on the handset: a device that fetches a broken
+ * script types garbage into a live menu holding real money, so the parse has
+ * to fail on this side of the wire.
+ */
+admin.put('/scripts/:country/:carrier', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    entry?: unknown; steps?: unknown; successRe?: unknown;
+  };
+  const entry = String(body.entry ?? '').trim();
+  if (!entry.startsWith('*') || !entry.endsWith('#')) {
+    return c.json({ error: 'entry_must_be_a_ussd_string', field: 'entry' }, 400);
+  }
+  if (!Array.isArray(body.steps) || body.steps.length === 0) {
+    return c.json({ error: 'steps_required', field: 'steps' }, 400);
+  }
+  for (const [i, step] of body.steps.entries()) {
+    const st = step as { expect?: unknown; send?: unknown };
+    if (typeof st.expect !== 'string' || typeof st.send !== 'string') {
+      return c.json({ error: `step_${i}_needs_expect_and_send`, field: 'steps' }, 400);
+    }
+    try {
+      new RegExp(st.expect);
+    } catch {
+      return c.json({ error: `step_${i}_expect_is_not_a_regex`, field: 'steps' }, 400);
+    }
+  }
+
+  const country = c.req.param('country').toUpperCase();
+  const carrier = c.req.param('carrier');
+  await c.env.DB.prepare(
+    `INSERT INTO ussd_scripts (country, carrier, version, entry, steps, success_re, updated_at)
+     VALUES (?, ?, 1, ?, ?, ?, ?)
+     ON CONFLICT(country, carrier) DO UPDATE SET
+       version = ussd_scripts.version + 1,
+       entry = excluded.entry, steps = excluded.steps,
+       success_re = excluded.success_re, updated_at = excluded.updated_at`,
+  )
+    .bind(country, carrier, entry, JSON.stringify(body.steps), body.successRe ?? null, now())
+    .run();
+
+  const row = await c.env.DB.prepare(
+    `SELECT version FROM ussd_scripts WHERE country = ? AND carrier = ?`,
+  )
+    .bind(country, carrier)
+    .first<{ version: number }>();
+  const staff = c.get('staff');
+  console.log(`[audit] ussd script ${country}/${carrier} v${row?.version} published by ${staff?.email ?? staff?.id}`);
+  return c.json({ country, carrier, version: row?.version ?? 1 });
 });
 
 // ── order actions ───────────────────────────────────────────────────────────
